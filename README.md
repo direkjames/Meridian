@@ -69,6 +69,7 @@ A private, offline-first fitness tracker for Android. No accounts, no feed, and 
 - Save to Photos, open Instagram (add it with the Photo sticker), or share anywhere
 - **Privacy zones**: hide your home or work from the start and end of shared routes and exported GPX files (backups keep everything)
 - **Weather tag**: each activity gets the conditions at its start (looked up once from Open-Meteo with your area rounded to ~10 km; can be turned off in Settings)
+- **Light, dark or system theme** (Settings > Appearance); maps stay dark in every theme
 
 **Your data**
 - Import your **Strava archive ZIP** (GPX / TCX / FIT, names and sports kept), or single files

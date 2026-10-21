@@ -102,7 +102,7 @@ fun RouteMap(
                 isCompassEnabled = false
                 attributionGravity = Gravity.BOTTOM or Gravity.START
                 logoGravity = Gravity.BOTTOM or Gravity.START
-                setAttributionTintColor(MColors.Muted.toArgb())
+                setAttributionTintColor(MColors.Dark.muted.toArgb())
             }
             m.addOnCameraMoveStartedListener { reason ->
                 if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) panCallback()
@@ -220,7 +220,7 @@ fun rememberMapView(): MapView {
     val mapView = remember {
         val options = MapLibreMapOptions.createFromAttributes(context, null)
             .textureMode(true) // fades smoothly with the rest of the UI
-            .foregroundLoadColor(MColors.Bg.toArgb()) // no white flash while tiles load
+            .foregroundLoadColor(MColors.Dark.bg.toArgb()) // no white flash while tiles load
         MapView(context, options).apply { onCreate(null) }
     }
     DisposableEffect(lifecycle, mapView) {
@@ -247,9 +247,10 @@ fun rememberMapView(): MapView {
 }
 
 private fun addRouteLayers(style: Style) {
-    val accent = MColors.Accent.toArgb()
-    val bg = MColors.Bg.toArgb()
-    val ink = MColors.Text.toArgb()
+    // The map is always dark, so its lines and markers use the dark palette in every theme.
+    val accent = MColors.Dark.accent.toArgb()
+    val bg = MColors.Dark.bg.toArgb()
+    val ink = MColors.Dark.text.toArgb()
 
     style.addSource(GeoJsonSource(SRC_ROUTE))
     style.addSource(GeoJsonSource(SRC_START))

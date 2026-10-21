@@ -2,7 +2,10 @@ package com.meridian.tracker.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.content.res.Configuration
 import com.meridian.tracker.ui.Format
+import com.meridian.tracker.ui.theme.MColors
+import com.meridian.tracker.ui.theme.ThemeMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
@@ -43,6 +46,10 @@ object Prefs {
     private val _weatherTag = MutableStateFlow(true)
     /** Look up the weather for each activity (sends an approximate location to Open-Meteo). */
     val weatherTag: StateFlow<Boolean> = _weatherTag.asStateFlow()
+
+    private val _themeMode = MutableStateFlow(ThemeMode.DARK)
+    /** Light, dark, or follow the phone. Dark is the original look, so it stays the default. */
+    val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
 
     private val _zones = MutableStateFlow<List<PrivacyZone>>(emptyList())
     /** Places where the start and end of a route are hidden in shares and GPX exports. */
@@ -85,6 +92,10 @@ object Prefs {
         _backupVideos.value = sp.getBoolean("backupVideos", false)
         _lastBackupMs.value = sp.getLong("lastBackupMs", 0L)
         _weatherTag.value = sp.getBoolean("weatherTag", true)
+        _themeMode.value = sp.getString("themeMode", null)?.let { n -> runCatching { ThemeMode.valueOf(n) }.getOrNull() } ?: ThemeMode.DARK
+        // Colours are right from the very first frame, before any screen is composed.
+        val systemDark = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+        MColors.apply(_themeMode.value.resolve(systemDark))
         _zones.value = decodeZones(sp.getString("privacyZones", null))
         val kg = sp.getFloat("bodyWeightKg", 0f).toDouble()
         _body.value = Body(
@@ -211,6 +222,11 @@ object Prefs {
             PrivacyZones.clean(PrivacyZone(o.getString("id"), o.optString("name"), o.getDouble("lat"), o.getDouble("lon"), o.getDouble("r")))
         }.take(PrivacyZones.MAX_ZONES)
     }.getOrDefault(emptyList())
+
+    fun setThemeMode(mode: ThemeMode) {
+        _themeMode.value = mode
+        sp.edit().putString("themeMode", mode.name).apply()
+    }
 
     fun setWeatherTag(v: Boolean) {
         _weatherTag.value = v
