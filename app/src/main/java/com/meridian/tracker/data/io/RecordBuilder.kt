@@ -111,10 +111,13 @@ object RecordBuilder {
             // Strava GPX type codes
             t == "9" -> Sport.RUN
             t == "1" -> Sport.RIDE
-            t == "10" || t == "4" -> Sport.WALK
+            t == "10" -> Sport.WALK
+            t == "4" -> Sport.HIKE
+            "trail" in t -> Sport.TRAIL_RUN
             "run" in t || "jog" in t -> Sport.RUN
             "ride" in t || "bik" in t || "cycl" in t || "bicycl" in t -> Sport.RIDE
-            "walk" in t || "hik" in t || "trek" in t -> Sport.WALK
+            "hik" in t || "trek" in t -> Sport.HIKE
+            "walk" in t -> Sport.WALK
             else -> null
         }
     }

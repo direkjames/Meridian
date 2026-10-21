@@ -140,7 +140,8 @@ object FitParser {
     private fun sportFromFit(code: Int): Sport? = when (code) {
         1 -> Sport.RUN
         2 -> Sport.RIDE
-        11, 17 -> Sport.WALK // walking, hiking
+        11 -> Sport.WALK
+        17 -> Sport.HIKE
         else -> null
     }
 

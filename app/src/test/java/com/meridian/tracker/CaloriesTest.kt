@@ -35,6 +35,25 @@ class CaloriesTest {
         assertEquals(Calories.Method.PACE, e.method)
     }
 
+    @Test fun hikingBurnsMoreThanWalkingAtTheSameSpeed() {
+        val walk = Calories.estimate(record(Sport.WALK, 4.0, 60), body70)!!.kcal
+        val hike = Calories.estimate(record(Sport.HIKE, 4.0, 60), body70)!!.kcal
+        assertTrue(hike > walk)
+    }
+
+    @Test fun trailRunBurnsAtLeastAsMuchAsRoadRunAtTheSameSpeed() {
+        val road = Calories.estimate(record(Sport.RUN, 10.0, 60), body70)!!.kcal
+        val trail = Calories.estimate(record(Sport.TRAIL_RUN, 10.0, 60), body70)!!.kcal
+        assertTrue(trail >= road)
+    }
+
+    @Test fun sportGroupsAndShortLabels() {
+        assertTrue(Sport.TRAIL_RUN.isRunning && Sport.RUN.isRunning && !Sport.HIKE.isRunning)
+        assertTrue(Sport.HIKE.isWalking && Sport.WALK.isWalking && !Sport.RIDE.isWalking)
+        assertEquals("Trail", Sport.TRAIL_RUN.short)
+        assertEquals("Hike", Sport.HIKE.short)
+    }
+
     @Test fun walkingBurnsLessThanRunningForTheSameTime() {
         val walk = Calories.estimate(record(Sport.WALK, 5.0, 60), body70)!!.kcal
         val run = Calories.estimate(record(Sport.RUN, 10.0, 60), body70)!!.kcal

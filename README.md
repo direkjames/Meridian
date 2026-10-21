@@ -5,7 +5,7 @@ A private, offline-first fitness tracker for Android. No accounts, no feed, and 
 ## Features
 
 **Recording**
-- Runs, rides and walks with GPS that keeps going with the screen off, a live notification, a 3-2-1 countdown, pause, hold-to-finish and a pocket lock
+- Runs, trail runs, walks, hikes and rides with GPS that keeps going with the screen off, a live notification, a 3-2-1 countdown, pause, hold-to-finish and a pocket lock
 - Clean distance: Kalman smoothing, spike rejection and stationary-drift filtering
 - **Pause and Resume from the notification**, so you can control a run from the lock screen
 - Live distance, time, pace (or speed), climb, average pace and moving time; barometer elevation when available

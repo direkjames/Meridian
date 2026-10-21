@@ -248,8 +248,8 @@ object PlanGenerator {
     // ---- Progress ---------------------------------------------------------------------------
 
     private fun countsFor(mode: PlanMode, sport: Sport) = when (mode) {
-        PlanMode.RUN -> sport == Sport.RUN
-        PlanMode.WALK, PlanMode.RUN_WALK -> sport == Sport.WALK || sport == Sport.RUN
+        PlanMode.RUN -> sport.isRunning
+        PlanMode.WALK, PlanMode.RUN_WALK -> sport.isWalking || sport.isRunning
     }
 
     /** How each day went, comparing the plan with what you actually recorded. */

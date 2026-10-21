@@ -1,5 +1,7 @@
 package com.meridian.tracker.ui.components
 
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
@@ -173,7 +175,7 @@ fun SportSelector(selected: Sport, onSelect: (Sport) -> Unit, modifier: Modifier
                     .clickable(role = Role.Tab) { onSelect(sport) },
                 contentAlignment = Alignment.Center,
             ) {
-                Text(sport.label, style = MType.Button.copy(color = fg))
+                Text(sport.short, style = MType.Button.copy(color = fg), maxLines = 1)
             }
         }
     }
@@ -451,7 +453,7 @@ fun Segmented(options: List<String>, selected: Int, onSelect: (Int) -> Unit, mod
                     .clickable(role = Role.Tab) { onSelect(i) },
                 contentAlignment = Alignment.Center,
             ) {
-                Text(label, style = MType.Button.copy(color = fg))
+                Text(label, style = MType.Button.copy(color = fg), maxLines = 1)
             }
         }
     }
@@ -459,7 +461,7 @@ fun Segmented(options: List<String>, selected: Int, onSelect: (Int) -> Unit, mod
 
 @Composable
 fun SportFilterRow(selected: Sport?, onSelect: (Sport?) -> Unit, modifier: Modifier = Modifier) {
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         FilterPill("All", selected == null) { onSelect(null) }
         Sport.entries.forEach { sport -> FilterPill(sport.label, selected == sport) { onSelect(sport) } }
     }

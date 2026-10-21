@@ -202,7 +202,7 @@ object Stats {
 
     fun specsFor(sport: Sport): List<BestSpec> {
         val efforts = when (sport) {
-            Sport.RUN -> listOf(
+            Sport.RUN, Sport.TRAIL_RUN -> listOf(
                 1000.0 to "Fastest 1K",
                 5000.0 to "Fastest 5K",
                 10000.0 to "Fastest 10K",
@@ -219,6 +219,7 @@ object Stats {
                 1000.0 to "Fastest 1K",
                 5000.0 to "Fastest 5K",
             )
+            Sport.HIKE -> emptyList()
         }.map { (m, title) -> BestSpec("effort-${m.toLong()}", title, BestKind.EFFORT, m) }
         return efforts + listOf(
             BestSpec("distance", "Longest ${sport.label.lowercase()}", BestKind.DISTANCE),
