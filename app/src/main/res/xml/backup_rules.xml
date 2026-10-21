@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android's automatic Google backup (Android 11 and older): activities + settings only. -->
+<full-backup-content>
+    <include domain="file" path="activities/" />
+    <include domain="file" path="extras/" />
+    <include domain="sharedpref" path="meridian.xml" />
+</full-backup-content>

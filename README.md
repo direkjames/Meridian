@@ -1,4 +1,4 @@
-# Meridian 1.0
+# Meridian 1.1
 
 A private, offline-first fitness tracker for Android. No accounts, no feed, and your activities never leave your phone.
 
@@ -12,6 +12,18 @@ A private, offline-first fitness tracker for Android. No accounts, no feed, and 
 - **Race your ghost**: your previous effort on the same route, shown as a dot on the map and "+12 s ahead"
 - **Today's plan target** as a progress bar, with a buzz when you reach it
 - Crash-safe: a snapshot every 15 seconds, offered back if Android kills the app
+
+**Heart rate, watches & steps** (new in 1.1)
+- **Live heart rate over Bluetooth** from chest straps (Polar, Garmin HRM, Wahoo…) and watches that broadcast
+  heart rate (Garmin "Broadcast Heart Rate", Coros, Polar, Suunto, Amazfit, some Huawei). Pair once in
+  Settings › Watches & sensors; Meridian reconnects by itself when you record
+- **Fitbit, Garmin, Samsung, Pixel Watch and more via Health Connect**: watch workouts appear in Meridian with
+  heart rate, steps and the map (when the watch app shares the route). Phone recordings get your watch's heart
+  rate added automatically. Read-only and on-device
+- **Step counter** during runs and walks: steps, cadence and stride on the Activity Complete screen, live steps
+  and steps-per-minute while recording
+- Heart-rate chart, **time in zones** (from your max heart rate), and **Relative Effort from heart rate**
+- Heart rate is kept in GPX exports and read from GPX, TCX and FIT imports
 
 **Activities**
 - History with filters, a weekly chart and month groups
@@ -73,6 +85,10 @@ to the Play Store, create a proper key with **Build › Generate Signed App Bund
 - Settings › Background recording: if it says **FIX**, set Meridian's Battery to **Unrestricted**.
   Some brands (Xiaomi, Oppo, Vivo, Huawei, Samsung) stop background apps aggressively.
 - Do your first recording outside, since GPS indoors is weak.
+- Allow **Physical activity** when asked, so steps are counted.
+- Watches: Settings › **Watches & sensors**. For live heart rate, turn on heart-rate broadcasting on the watch,
+  then tap Find a sensor. For Fitbit/Garmin/Samsung workouts, turn on Health Connect in the watch app, then tap
+  Connect Health Connect in Meridian.
 
 ## Project layout
 
@@ -85,7 +101,9 @@ app/src/main/java/com/meridian/tracker/
     ElevationTracker.kt     barometer/GPS climb with noise filtering
     Follow.kt               ghost runner and route following
     TrackingManager.kt      recording state, ghost / route / target guides
-    TrackingService.kt      foreground service: GPS + barometer with screen off
+    TrackingService.kt      foreground service: GPS, barometer and steps with screen off
+    HeartRateMonitor.kt     Bluetooth heart-rate sensors (standard Heart Rate profile)
+    StepCounter.kt          steps and cadence from the phone's step sensor
   data/
     ActivityStore.kt        activities as JSON on the phone + crash snapshots
     ExtrasStore.kt          training plan, goals, saved routes, badge history
@@ -96,11 +114,13 @@ app/src/main/java/com/meridian/tracker/
     Stats.kt                periods, streaks, best efforts, personal bests, reviews
     ActivityAnalysis.kt     pace/elevation profiles
     DataTransfer.kt         import, export, backup, restore, auto-backup
+    HeartRate.kt            heart-rate parsing, zones, effort, charts
+    HealthSync.kt           Health Connect: watch workouts, heart rate, steps
     io/                     GPX/TCX/FIT readers, GPX writer, Strava CSV
     OfflineMaps.kt, Prefs.kt, TileMath.kt
   share/                    share images and sharing
   ui/                       theme, components, screens
-app/src/test/               39 unit tests
+app/src/test/               56 unit tests
 ```
 
 Run the unit tests in Android Studio: right-click `app/src/test` › **Run Tests**.
