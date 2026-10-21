@@ -1,4 +1,4 @@
-# Meridian 1.2
+# Meridian 2.0
 
 A private, offline-first fitness tracker for Android. No accounts, no feed, and your activities never leave your phone.
 

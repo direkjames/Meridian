@@ -38,6 +38,7 @@ import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapLibreMapOptions
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
+import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
@@ -143,6 +144,7 @@ fun RouteMap(
             listOf(Feature.fromGeometry(LineString.fromLngLats(pts.map { Point.fromLngLat(it.second, it.first) })))
         } ?: emptyList()
         s.getSourceAs<GeoJsonSource>(SRC_PLANNED)?.setGeoJson(FeatureCollection.fromFeatures(line))
+        s.setEndpoints(plannedRoute)
     }
     LaunchedEffect(style, ghost) {
         val s = style ?: return@LaunchedEffect
@@ -257,6 +259,7 @@ private fun addRouteLayers(style: Style) {
     style.addSource(GeoJsonSource(SRC_ME))
     style.addSource(GeoJsonSource(SRC_PLANNED))
     style.addSource(GeoJsonSource(SRC_GHOST))
+    style.addEndpointLayers()
 
     style.addLayer(
         LineLayer("planned-line", SRC_PLANNED).withProperties(
@@ -329,4 +332,69 @@ private fun routeFeatures(points: List<TrackPoint>): FeatureCollection {
         .map { seg -> seg.map { Point.fromLngLat(it.lon, it.lat) } }
     if (lines.isEmpty()) return FeatureCollection.fromFeatures(emptyList<Feature>())
     return FeatureCollection.fromFeatures(listOf(Feature.fromGeometry(MultiLineString.fromLngLats(lines))))
+}
+
+private const val SRC_ENDPOINTS = "route-endpoints"
+private const val KIND = "kind"
+private const val START_GREEN = 0xFF34D399.toInt()
+private const val FINISH_RED = 0xFFF87171.toInt()
+
+/** Start (green) and finish (red) markers; a loop or out-and-back shows one green dot with a red ring. */
+internal fun Style.addEndpointLayers() {
+    addSource(GeoJsonSource(SRC_ENDPOINTS))
+    val ink = MColors.Dark.text.toArgb()
+    addLayer(
+        CircleLayer("endpoint-halo", SRC_ENDPOINTS).withProperties(
+            PropertyFactory.circleRadius(13f),
+            PropertyFactory.circleColor(
+                Expression.match(
+                    Expression.get(KIND),
+                    Expression.color(START_GREEN),
+                    Expression.stop("finish", Expression.color(FINISH_RED)),
+                    Expression.stop("both", Expression.color(FINISH_RED)),
+                )
+            ),
+            PropertyFactory.circleOpacity(0.28f),
+        )
+    )
+    addLayer(
+        CircleLayer("endpoint-dot", SRC_ENDPOINTS).withProperties(
+            PropertyFactory.circleRadius(7.5f),
+            PropertyFactory.circleColor(
+                Expression.match(
+                    Expression.get(KIND),
+                    Expression.color(START_GREEN),
+                    Expression.stop("finish", Expression.color(FINISH_RED)),
+                )
+            ),
+            PropertyFactory.circleStrokeColor(
+                Expression.match(
+                    Expression.get(KIND),
+                    Expression.color(ink),
+                    Expression.stop("both", Expression.color(FINISH_RED)),
+                )
+            ),
+            PropertyFactory.circleStrokeWidth(3f),
+        )
+    )
+}
+
+/** Marks the first and last point of [route]; clears the markers when there is no route. */
+internal fun Style.setEndpoints(route: List<Pair<Double, Double>>?) {
+    val src = getSourceAs<GeoJsonSource>(SRC_ENDPOINTS) ?: return
+    if (route == null || route.size < 2) {
+        src.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
+        return
+    }
+    val a = route.first()
+    val b = route.last()
+    // Within ~30 m the two ends are the same place.
+    val same = kotlin.math.abs(a.first - b.first) < 0.0003 && kotlin.math.abs(a.second - b.second) < 0.0003
+    fun pt(p: Pair<Double, Double>, kind: String) =
+        Feature.fromGeometry(Point.fromLngLat(p.second, p.first)).also { it.addStringProperty(KIND, kind) }
+    src.setGeoJson(
+        FeatureCollection.fromFeatures(
+            if (same) listOf(pt(a, "both")) else listOf(pt(b, "finish"), pt(a, "start"))
+        )
+    )
 }
