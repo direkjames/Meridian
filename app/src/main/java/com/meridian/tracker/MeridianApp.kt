@@ -54,7 +54,12 @@ class MeridianApp : Application() {
             getString(R.string.channel_plan),
             NotificationManager.IMPORTANCE_DEFAULT,
         ).apply { description = getString(R.string.channel_plan_desc) }
-        getSystemService(NotificationManager::class.java).createNotificationChannels(listOf(channel, planChannel))
+        val alertsChannel = NotificationChannel(
+            CHANNEL_ALERTS,
+            getString(R.string.channel_alerts),
+            NotificationManager.IMPORTANCE_HIGH,
+        ).apply { description = getString(R.string.channel_alerts_desc) }
+        getSystemService(NotificationManager::class.java).createNotificationChannels(listOf(channel, planChannel, alertsChannel))
         PlanReminders.schedule(this)
 
         // A fresh process never has a recording running, so any leftover snapshot means
@@ -67,5 +72,6 @@ class MeridianApp : Application() {
     companion object {
         const val CHANNEL_TRACKING = "tracking"
         const val CHANNEL_PLAN = "plan"
+        const val CHANNEL_ALERTS = "alerts"
     }
 }

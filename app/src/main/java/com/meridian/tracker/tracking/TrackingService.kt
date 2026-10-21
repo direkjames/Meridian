@@ -118,9 +118,18 @@ class TrackingService : Service() {
         when (intent?.action) {
             ACTION_START -> startTracking()
             ACTION_STOP -> stopTracking()
-            else -> if (!tracking) stopTracking()
+            else -> if (!tracking) {
+                // A null intent means Android killed Meridian mid-recording and restarted this
+                // service. Background restarts can't get location back, so tell the user instead
+                // of silently losing the rest of the run; the saved part is offered on open.
+                if (intent == null && TrackingManager.state.value.status == RecordStatus.IDLE && ActivityStore.hasInProgress()) {
+                    notifyInterrupted()
+                }
+                stopTracking()
+            }
         }
-        return START_NOT_STICKY
+        // Sticky so Android hands the service back after killing it (see above).
+        return if (intent?.action == ACTION_START) START_STICKY else START_NOT_STICKY
     }
 
     @SuppressLint("MissingPermission")
@@ -182,6 +191,29 @@ class TrackingService : Service() {
                 delay(NOTIFICATION_REFRESH_MS)
             }
         }
+    }
+
+    private fun notifyInterrupted() {
+        val canNotify = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        if (!canNotify) return
+        val openApp = PendingIntent.getActivity(
+            this,
+            1,
+            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val n = NotificationCompat.Builder(this, MeridianApp.CHANNEL_ALERTS)
+            .setSmallIcon(R.drawable.ic_stat_meridian)
+            .setColor(ContextCompat.getColor(this, R.color.accent))
+            .setContentTitle("Recording was interrupted")
+            .setContentText("Android stopped Meridian. Tap to save what was recorded.")
+            .setContentIntent(openApp)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .build()
+        NotificationManagerCompat.from(this).notify(NOTIFICATION_ID_INTERRUPTED, n)
     }
 
     /** True once today's plan target (distance or moving time) has been met. */
@@ -296,6 +328,7 @@ class TrackingService : Service() {
         const val ACTION_START = "com.meridian.tracker.action.START"
         const val ACTION_STOP = "com.meridian.tracker.action.STOP"
         private const val NOTIFICATION_ID = 42
+        private const val NOTIFICATION_ID_INTERRUPTED = 43
         private const val NOTIFICATION_REFRESH_MS = 3_000L
         private const val SNAPSHOT_EVERY_TICKS = 5
         private const val HR_TAG = "recording"
