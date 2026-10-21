@@ -258,7 +258,9 @@ object ActivityMedia {
     private fun decodePhoto(context: Context, uri: Uri, maxEdge: Int): Bitmap? {
         val resolver = context.contentResolver
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) } ?: return null
+        // With inJustDecodeBounds the decode always returns null; only the sizes in [bounds] matter.
+        val input = resolver.openInputStream(uri) ?: return null
+        input.use { BitmapFactory.decodeStream(it, null, bounds) }
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
         val opts = BitmapFactory.Options().apply { inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, maxEdge) }
         val decoded = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) } ?: return null
