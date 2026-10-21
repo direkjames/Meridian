@@ -40,6 +40,8 @@ import com.meridian.tracker.data.ActivityAnalysis
 import com.meridian.tracker.data.ActivityRecord
 import com.meridian.tracker.data.ActivityStore
 import com.meridian.tracker.data.Badges
+import com.meridian.tracker.data.Calories
+import com.meridian.tracker.data.Prefs
 import com.meridian.tracker.data.EarnedBadge
 import com.meridian.tracker.data.Effort
 import com.meridian.tracker.data.ExtrasStore
@@ -113,6 +115,8 @@ fun SummaryScreen(
     }
     val profile = remember(record.id, record.points.size) { ActivityAnalysis.profile(record.points) }
     val saved by ActivityStore.activities.collectAsStateWithLifecycle()
+    val body by Prefs.body.collectAsStateWithLifecycle()
+    val calories = remember(record, body) { Calories.estimate(record, body) }
     val newBests by produceState(initialValue = emptyList<BestResult>(), record.id, saved.size) {
         value = withContext(Dispatchers.Default) { Stats.newBestsFor(record, saved) }
     }
@@ -247,6 +251,14 @@ fun SummaryScreen(
                                 StatCell("Avg heart rate", "${record.avgHeartRate ?: "–"}", "bpm", Modifier.weight(1f))
                                 VerticalHairline(Modifier.padding(horizontal = 14.dp))
                                 StatCell("Max heart rate", "${record.maxHeartRate ?: "–"}", "bpm", Modifier.weight(1f))
+                            }
+                        }
+                        calories?.let { c ->
+                            HorizontalHairline()
+                            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(20.dp)) {
+                                StatCell("Calories", "≈ ${Format.count(c.kcal)}", "kcal", Modifier.weight(1f))
+                                VerticalHairline(Modifier.padding(horizontal = 14.dp))
+                                StatCell("Based on", c.method.label, null, Modifier.weight(1f))
                             }
                         }
                         if (profile.hasSpeed || profile.hasElevation) {

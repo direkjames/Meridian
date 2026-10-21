@@ -34,6 +34,10 @@ object Prefs {
     /** Also copy videos into the automatic backup (they can be large). Manual backups always include them. */
     val backupVideos: StateFlow<Boolean> = _backupVideos.asStateFlow()
 
+    private val _body = MutableStateFlow(Body())
+    /** Weight, birth year and sex, used only for calorie estimates. Stays on the phone. */
+    val body: StateFlow<Body> = _body.asStateFlow()
+
     private val _lastBackupMs = MutableStateFlow(0L)
     val lastBackupMs: StateFlow<Long> = _lastBackupMs.asStateFlow()
 
@@ -70,6 +74,13 @@ object Prefs {
         _autoBackupUri.value = sp.getString("autoBackupUri", null)
         _backupVideos.value = sp.getBoolean("backupVideos", false)
         _lastBackupMs.value = sp.getLong("lastBackupMs", 0L)
+        val kg = sp.getFloat("bodyWeightKg", 0f).toDouble()
+        _body.value = Body(
+            weightKg = if (kg in 30.0..300.0) kg else Calories.DEFAULT_WEIGHT_KG,
+            weightKnown = kg in 30.0..300.0,
+            birthYear = sp.getInt("bodyBirthYear", 0).takeIf { it in 1900..2100 },
+            sex = sp.getString("bodySex", null)?.let { s -> runCatching { BodySex.valueOf(s) }.getOrNull() },
+        )
         _countSteps.value = sp.getBoolean("countSteps", true)
         _askedSteps.value = sp.getBoolean("askedSteps", false)
         val address = sp.getString("hrAddress", null)
@@ -137,6 +148,24 @@ object Prefs {
     fun setAutoBackupUri(uri: String?) {
         _autoBackupUri.value = uri
         sp.edit().putString("autoBackupUri", uri).apply()
+    }
+
+    /** Pass null to clear a value. */
+    fun setBodyWeight(kg: Double?) {
+        val ok = kg?.takeIf { it in 30.0..300.0 }
+        _body.value = _body.value.copy(weightKg = ok ?: Calories.DEFAULT_WEIGHT_KG, weightKnown = ok != null)
+        sp.edit().putFloat("bodyWeightKg", (ok ?: 0.0).toFloat()).apply()
+    }
+
+    fun setBirthYear(year: Int?) {
+        val ok = year?.takeIf { it in 1900..2100 }
+        _body.value = _body.value.copy(birthYear = ok)
+        sp.edit().putInt("bodyBirthYear", ok ?: 0).apply()
+    }
+
+    fun setSex(sex: BodySex?) {
+        _body.value = _body.value.copy(sex = sex)
+        sp.edit().putString("bodySex", sex?.name).apply()
     }
 
     fun setBackupVideos(v: Boolean) {

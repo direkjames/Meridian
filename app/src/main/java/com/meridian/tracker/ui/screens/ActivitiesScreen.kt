@@ -39,6 +39,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.meridian.tracker.data.ActivityRecord
 import com.meridian.tracker.data.ActivityStore
+import com.meridian.tracker.data.Body
+import com.meridian.tracker.data.Calories
+import com.meridian.tracker.data.Prefs
 import com.meridian.tracker.tracking.Sport
 import com.meridian.tracker.ui.Format
 import com.meridian.tracker.ui.components.RouteCanvas
@@ -66,7 +69,8 @@ fun ActivitiesScreen(onOpen: (String) -> Unit) {
 
     val visible = remember(all, filter) { if (filter == null) all else all.filter { it.sport == filter } }
     val months = remember(visible) { groupByMonth(visible) }
-    val week = remember(visible) { weekSummary(visible) }
+    val body by Prefs.body.collectAsStateWithLifecycle()
+    val week = remember(visible, body) { weekSummary(visible, body) }
 
     Column(
         Modifier
@@ -150,15 +154,18 @@ private data class WeekSummary(
     val totalM: Double,
     val count: Int,
     val movingMs: Long,
+    /** Estimated calories burned this week. */
+    val kcal: Int,
 )
 
-private fun weekSummary(records: List<ActivityRecord>): WeekSummary {
+private fun weekSummary(records: List<ActivityRecord>, body: Body): WeekSummary {
     val zone = ZoneId.systemDefault()
     val today = LocalDate.now(zone)
     val monday = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
     val perDay = DoubleArray(7)
     var count = 0
     var moving = 0L
+    var kcal = 0
     records.forEach { r ->
         val day = Instant.ofEpochMilli(r.startTimeMs).atZone(zone).toLocalDate()
         val idx = ChronoUnit.DAYS.between(monday, day).toInt()
@@ -166,9 +173,10 @@ private fun weekSummary(records: List<ActivityRecord>): WeekSummary {
             perDay[idx] += r.distanceM
             count++
             moving += r.movingMs
+            kcal += Calories.estimate(r, body)?.kcal ?: 0
         }
     }
-    return WeekSummary(perDay.toList(), today.dayOfWeek.value - 1, perDay.sum(), count, moving)
+    return WeekSummary(perDay.toList(), today.dayOfWeek.value - 1, perDay.sum(), count, moving, kcal)
 }
 
 @Composable
@@ -189,6 +197,10 @@ private fun WeekCard(week: WeekSummary) {
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(Format.duration(week.movingMs), style = MType.Label)
+                    if (week.kcal > 0) {
+                        Spacer(Modifier.height(4.dp))
+                        Text("≈ ${Format.count(week.kcal)} KCAL", style = MType.Label)
+                    }
                 }
             }
             Spacer(Modifier.height(18.dp))
