@@ -38,17 +38,19 @@ import com.meridian.tracker.ui.Format
 import com.meridian.tracker.ui.components.Segmented
 import com.meridian.tracker.ui.theme.MColors
 import com.meridian.tracker.ui.theme.MType
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
-/** What the dialog hands back: the planned route and a one-line summary. */
-class GeneratedRoute(val points: List<Pair<Double, Double>>, val name: String, val summary: String)
+/** One planned route: its points, a name, the real distance and whether it landed within 10% of the target. */
+class GeneratedRoute(val points: List<Pair<Double, Double>>, val name: String, val distanceM: Double, val onTarget: Boolean)
 
 /**
  * "Plan a route from a distance": asks how far, loop or out-and-back, on foot or by bike, and
  * says plainly that the location is sent to the routing service before anything is sent.
  */
 @Composable
-fun GenerateRouteDialog(onDismiss: () -> Unit, onRoute: (GeneratedRoute) -> Unit) {
+fun GenerateRouteDialog(onDismiss: () -> Unit, onRoutes: (List<GeneratedRoute>) -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var text by rememberSaveable { mutableStateOf("5") }
@@ -56,6 +58,10 @@ fun GenerateRouteDialog(onDismiss: () -> Unit, onRoute: (GeneratedRoute) -> Unit
     var profileIndex by rememberSaveable { mutableIntStateOf(0) }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    var found by remember { mutableIntStateOf(0) }
+    var job by remember { mutableStateOf<Job?>(null) }
+    // Bumped by every plan and every cancel, so a late location fix or a cancelled run can't act.
+    var attempt by remember { mutableIntStateOf(0) }
 
     val shape = RouteShape.entries[shapeIndex]
     val profile = RouteProfile.entries[profileIndex]
@@ -68,27 +74,37 @@ fun GenerateRouteDialog(onDismiss: () -> Unit, onRoute: (GeneratedRoute) -> Unit
             return
         }
         busy = true
+        found = 0
         message = null
+        val mine = ++attempt
         currentLocation(context) { loc ->
+            if (mine != attempt) return@currentLocation
             if (loc == null) {
                 busy = false
                 message = "Couldn't get your location. Try again outside."
                 return@currentLocation
             }
-            scope.launch {
-                val request = RouteRequest(loc.latitude, loc.longitude, distanceM, shape, profile, bearingDeg = (0 until 360).random().toDouble())
-                val result = RouteGenService.plan(request)
-                busy = false
-                when (result) {
-                    is PlanResult.Success -> {
+            job = scope.launch {
+                try {
+                    val request = RouteRequest(loc.latitude, loc.longitude, distanceM, shape, profile, bearingDeg = (0 until 360).random().toDouble())
+                    val result = RouteGenService.planChoices(request) { found = it }
+                    if (result.choices.isNotEmpty()) {
                         val label = "${Format.km(distanceM).trimEnd('0').trimEnd('.')} ${Format.distUnit} ${shape.label.lowercase()}"
-                        val note = if (result.withinTolerance) "Planned ${Format.km(result.distanceM)} ${Format.distUnit}."
-                        else "Closest I could find: ${Format.km(result.distanceM)} ${Format.distUnit}. Edit the points to adjust."
-                        onRoute(GeneratedRoute(result.points, label.replaceFirstChar { it.uppercase() }, note))
+                        onRoutes(result.choices.map {
+                            GeneratedRoute(it.points, label.replaceFirstChar { c -> c.uppercase() }, it.distanceM, abs(it.distanceM - distanceM) <= distanceM * RouteGen.TOLERANCE)
+                        })
+                    } else {
+                        message = when (result.failure) {
+                            PlanResult.Offline -> "Couldn't reach the routing service. Check your connection and try again."
+                            PlanResult.Invalid -> "That request doesn't look right. Check the distance."
+                            else -> "No path found from here. Try a different distance or start somewhere with more roads or paths."
+                        }
                     }
-                    PlanResult.NoPath -> message = "No path found from here. Try a different distance or start somewhere with more roads or paths."
-                    PlanResult.Offline -> message = "Couldn't reach the routing service. Check your connection and try again."
-                    PlanResult.Invalid -> message = "That request doesn't look right. Check the distance."
+                } finally {
+                    if (mine == attempt) {
+                        busy = false
+                        job = null
+                    }
                 }
             }
         }
@@ -143,6 +159,7 @@ fun GenerateRouteDialog(onDismiss: () -> Unit, onRoute: (GeneratedRoute) -> Unit
                 Spacer(Modifier.height(8.dp))
                 Text(
                     when {
+                        busy && found > 0 -> "Found $found of ${RouteGen.WANTED_CHOICES} routes… this takes a few seconds."
                         busy -> "Finding your location and planning…"
                         message != null -> message!!
                         else -> "Starts from where you are now."
@@ -161,7 +178,9 @@ fun GenerateRouteDialog(onDismiss: () -> Unit, onRoute: (GeneratedRoute) -> Unit
             }
         },
         dismissButton = {
-            TextButton(enabled = !busy, onClick = onDismiss) { Text("Cancel", style = MType.Button.copy(color = MColors.Text)) }
+            TextButton(onClick = { if (busy) { attempt++; job?.cancel(); busy = false } else onDismiss() }) {
+                Text("Cancel", style = MType.Button.copy(color = MColors.Text))
+            }
         },
     )
 }

@@ -250,16 +250,20 @@ fun RouteBuilderScreen(onBack: () -> Unit, onFollow: () -> Unit) {
     var generating by rememberSaveable { mutableStateOf(false) }
     var planNote by remember { mutableStateOf<String?>(null) }
     var fitRequest by remember { mutableStateOf(0) }
+    var choices by remember { mutableStateOf<List<GeneratedRoute>>(emptyList()) }
+    var chosen by remember { mutableStateOf(0) }
     val distance = points.zipWithNext().sumOf { (a, b) -> Geo.distanceM(a.first, a.second, b.first, b.second) }
 
     if (generating) {
         GenerateRouteDialog(
             onDismiss = { generating = false },
-            onRoute = { r ->
+            onRoutes = { found ->
+                choices = found
+                chosen = 0
                 points.clear()
-                points.addAll(r.points)
-                if (name.isEmpty()) name = r.name
-                planNote = r.summary
+                points.addAll(found[0].points)
+                if (name.isEmpty()) name = found[0].name
+                planNote = planSummary(found)
                 savedNote = null
                 generating = false
                 fitRequest++
@@ -267,11 +271,26 @@ fun RouteBuilderScreen(onBack: () -> Unit, onFollow: () -> Unit) {
         )
     }
 
+    // Choices stay on offer only while the drawn route is still the one picked; editing it turns them off.
+    val picked = choices.getOrNull(chosen)
+    val choicesShown = picked != null && picked.points == points.toList()
+    LaunchedEffect(choicesShown) { if (!choicesShown && choices.isNotEmpty()) choices = emptyList() }
+
     Column(Modifier.fillMaxSize().background(MColors.Bg)) {
         Box(Modifier.fillMaxWidth().weight(1f)) {
             val (map, style) = rememberStyledMap { m, s ->
                 s.addSource(GeoJsonSource("draft-line"))
                 s.addSource(GeoJsonSource("draft-pts"))
+                s.addSource(GeoJsonSource("alt-lines"))
+                s.addLayer(
+                    LineLayer("alt-lines", "alt-lines").withProperties(
+                        PropertyFactory.lineColor(MColors.Dark.text.toArgb()),
+                        PropertyFactory.lineOpacity(0.35f),
+                        PropertyFactory.lineWidth(4f),
+                        PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                        PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+                    )
+                )
                 s.addLayer(
                     LineLayer("draft-line", "draft-line").withProperties(
                         PropertyFactory.lineColor(MColors.Dark.accent.toArgb()),
@@ -316,6 +335,14 @@ fun RouteBuilderScreen(onBack: () -> Unit, onFollow: () -> Unit) {
                     FeatureCollection.fromFeatures(points.map { Feature.fromGeometry(Point.fromLngLat(it.second, it.first)) })
                 )
                 s.setEndpoints(points.toList())
+            }
+            // The other choices, faded behind the picked route.
+            LaunchedEffect(style, choices, chosen, choicesShown) {
+                val src = style?.getSourceAs<GeoJsonSource>("alt-lines") ?: return@LaunchedEffect
+                val others = if (choicesShown) choices.filterIndexed { i, _ -> i != chosen } else emptyList()
+                src.setGeoJson(FeatureCollection.fromFeatures(others.map { c ->
+                    Feature.fromGeometry(LineString.fromLngLats(c.points.map { Point.fromLngLat(it.second, it.first) }))
+                }))
             }
             Row(
                 Modifier
@@ -382,6 +409,26 @@ fun RouteBuilderScreen(onBack: () -> Unit, onFollow: () -> Unit) {
             planNote?.let {
                 Spacer(Modifier.height(6.dp))
                 Text(it.uppercase(), style = MType.Label.copy(color = MColors.Accent))
+            }
+            if (choicesShown && choices.size > 1) {
+                Spacer(Modifier.height(10.dp))
+                Text("PICK A ROUTE", style = MType.Label)
+                Spacer(Modifier.height(6.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    choices.forEachIndexed { i, c ->
+                        RouteChoiceCard(
+                            letter = ('A' + i).toString(),
+                            distance = "${Format.km(c.distanceM)} ${Format.distUnit}",
+                            selected = i == chosen,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            chosen = i
+                            points.clear()
+                            points.addAll(c.points)
+                            fitRequest++
+                        }
+                    }
+                }
             }
             Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -557,5 +604,31 @@ fun BadgesScreen(onBack: () -> Unit, onOpenActivity: (String) -> Unit) {
         }
         Spacer(Modifier.height(24.dp))
         Spacer(Modifier.navigationBarsPadding())
+    }
+}
+
+private fun planSummary(found: List<GeneratedRoute>): String {
+    val best = found[0]
+    val d = "${Format.km(best.distanceM)} ${Format.distUnit}"
+    return when {
+        !best.onTarget -> "Closest I could find: $d. Edit the points to adjust."
+        found.size == 1 -> "Planned $d. Only one route fit this area."
+        else -> "${found.size} routes planned. Tap A to ${'A' + found.size - 1} to compare."
+    }
+}
+
+@Composable
+private fun RouteChoiceCard(letter: String, distance: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Column(
+        modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (selected) MColors.Accent else MColors.Bg)
+            .border(1.dp, if (selected) MColors.Accent else MColors.Stroke, RoundedCornerShape(14.dp))
+            .clickable(role = Role.Tab, onClick = onClick)
+            .padding(vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(letter, style = MType.Heading.copy(color = if (selected) MColors.OnAccent else MColors.Text))
+        Text(distance, style = MType.Label.copy(color = if (selected) MColors.OnAccent else MColors.Faint), maxLines = 1)
     }
 }

@@ -135,4 +135,79 @@ class RouteGenTest {
         assertNotNull(RouteGen.thin(pts.take(5), 100))
         assertEquals(5, RouteGen.thin(pts.take(5), 100).size)
     }
+
+    @Test fun offersFourDifferentRoutesInDifferentDirections() = runBlocking {
+        val progress = ArrayList<Int>()
+        val out = RouteGen.planChoices(request(8.0), windyRoads) { progress += it }
+        assertNull(out.failure)
+        assertEquals(RouteGen.WANTED_CHOICES, out.choices.size)
+        assertEquals(listOf(1, 2, 3, 4), progress)
+        out.choices.forEach {
+            assertEquals(8000.0, it.distanceM, 8000.0 * RouteGen.TOLERANCE)
+            assertEquals(it.points.first(), it.points.last())
+        }
+        // Headings are all different, and no two routes are the same.
+        assertEquals(4, out.choices.map { it.bearingDeg }.toSet().size)
+        for (i in out.choices.indices) for (j in i + 1 until out.choices.size) {
+            assertFalse(RouteGen.sameRoute(out.choices[i].points, out.choices[j].points))
+        }
+    }
+
+    @Test fun choicesAreSortedByHowCloseTheyAreToTheTarget() = runBlocking {
+        val out = RouteGen.planChoices(request(8.0), windyRoads)
+        val errors = out.choices.map { kotlin.math.abs(it.distanceM - 8000.0) }
+        assertEquals(errors.sorted(), errors)
+    }
+
+    @Test fun neverAsksTheServiceForMoreThanTheCap() = runBlocking {
+        var calls = 0
+        // Always wrong, so every direction burns all its tries.
+        val stubborn: suspend (List<Pair<Double, Double>>) -> RouteAnswer = { wp -> calls++; RouteAnswer.Ok(wp, 30_000.0) }
+        val out = RouteGen.planChoices(request(10.0), stubborn)
+        assertTrue(calls <= RouteGen.MAX_CHOICE_REQUESTS)
+        assertEquals(1, out.choices.size) // only the closest of the misses is offered
+        assertNull(out.failure)
+    }
+
+    @Test fun dropsRoutesThatAreTheSameRoadsAgain() = runBlocking {
+        // The service ignores where we point and always sends the same loop.
+        val fixed = windyRoads(RouteGen.waypoints(request(8.0), 40.0, 1000.0))
+        var calls = 0
+        val sameEveryTime: suspend (List<Pair<Double, Double>>) -> RouteAnswer = { calls++; RouteAnswer.Ok((fixed as RouteAnswer.Ok).points, 8000.0) }
+        val out = RouteGen.planChoices(request(8.0), sameEveryTime)
+        assertEquals(1, out.choices.size)
+        assertTrue(calls <= RouteGen.MAX_CHOICE_REQUESTS)
+    }
+
+    @Test fun keepsTheRoutesItHasWhenTheConnectionDropsPartWay() = runBlocking {
+        var calls = 0
+        val dropsAfterTwo: suspend (List<Pair<Double, Double>>) -> RouteAnswer = { wp ->
+            if (++calls > 2) RouteAnswer.Unreachable else RouteAnswer.Ok(wp, RouteGen.lengthM(wp) * 1.3)
+        }
+        val out = RouteGen.planChoices(request(8.0), dropsAfterTwo)
+        assertTrue(out.choices.isNotEmpty())
+        assertNull(out.failure)
+    }
+
+    @Test fun reportsOfflineWhenNothingCameBack() = runBlocking {
+        val out = RouteGen.planChoices(request(), { RouteAnswer.Unreachable })
+        assertTrue(out.choices.isEmpty())
+        assertTrue(out.failure is PlanResult.Offline)
+    }
+
+    @Test fun reportsNoPathAndRejectsBadRequests() = runBlocking {
+        val none = RouteGen.planChoices(request(), { RouteAnswer.NoRoute })
+        assertTrue(none.choices.isEmpty())
+        assertTrue(none.failure is PlanResult.NoPath)
+        assertTrue(RouteGen.planChoices(request(0.1), windyRoads).failure is PlanResult.Invalid)
+    }
+
+    @Test fun recognisesTheSameRouteAndDifferentOnes() {
+        val a = (0..100).map { 14.6 + it * 0.0001 to 121.05 }
+        val shifted = a.map { it.first to it.second + 0.0001 } // ~10 m sideways
+        val far = a.map { it.first to it.second + 0.01 } // ~1 km away
+        assertTrue(RouteGen.sameRoute(a, shifted))
+        assertFalse(RouteGen.sameRoute(a, far))
+        assertFalse(RouteGen.sameRoute(emptyList(), a))
+    }
 }
