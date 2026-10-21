@@ -61,6 +61,7 @@ import com.meridian.tracker.ui.components.SectionCard
 import com.meridian.tracker.ui.components.Segmented
 import com.meridian.tracker.ui.theme.MColors
 import com.meridian.tracker.ui.theme.MType
+import com.meridian.tracker.ui.theme.ThemeMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -88,6 +89,7 @@ fun SettingsScreen(onBack: () -> Unit, onOpenOfflineMaps: () -> Unit, onOpenSens
         value = withContext(Dispatchers.IO) { ActivityMedia.sizes() }
     }
     val weatherTag by Prefs.weatherTag.collectAsStateWithLifecycle()
+    val themeMode by Prefs.themeMode.collectAsStateWithLifecycle()
     val importStatus by DataTransfer.importStatus.collectAsStateWithLifecycle()
     val activities by ActivityStore.activities.collectAsStateWithLifecycle()
 
@@ -159,6 +161,20 @@ fun SettingsScreen(onBack: () -> Unit, onOpenOfflineMaps: () -> Unit, onOpenSens
                         .padding(horizontal = 14.dp, vertical = 9.dp),
                 )
             }
+
+            // ---- Appearance
+            Section("Appearance")
+            Segmented(
+                options = ThemeMode.entries.map { it.label },
+                selected = themeMode.ordinal,
+                onSelect = { Prefs.setThemeMode(ThemeMode.entries[it]) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                "System follows your phone's light or dark setting. Maps stay dark in every theme.",
+                style = MType.Body.copy(fontSize = MType.Body.fontSize * 0.88f, color = MColors.Faint),
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
+            )
 
             // ---- Units
             Section("Units")

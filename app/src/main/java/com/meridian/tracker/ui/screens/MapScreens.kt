@@ -145,7 +145,7 @@ fun HeatmapScreen(onBack: () -> Unit) {
     Box(Modifier.fillMaxSize().background(MColors.Bg)) {
         val (map, style) = rememberStyledMap { _, s ->
             s.addSource(GeoJsonSource("heat"))
-            val accent = MColors.Accent.toArgb()
+            val accent = MColors.Dark.accent.toArgb()
             s.addLayer(
                 LineLayer("heat-glow", "heat").withProperties(
                     PropertyFactory.lineColor(accent),
@@ -253,7 +253,7 @@ fun RouteBuilderScreen(onBack: () -> Unit, onFollow: () -> Unit) {
                 s.addSource(GeoJsonSource("draft-pts"))
                 s.addLayer(
                     LineLayer("draft-line", "draft-line").withProperties(
-                        PropertyFactory.lineColor(MColors.Accent.toArgb()),
+                        PropertyFactory.lineColor(MColors.Dark.accent.toArgb()),
                         PropertyFactory.lineWidth(5f),
                         PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
                         PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
@@ -262,8 +262,8 @@ fun RouteBuilderScreen(onBack: () -> Unit, onFollow: () -> Unit) {
                 s.addLayer(
                     CircleLayer("draft-pts", "draft-pts").withProperties(
                         PropertyFactory.circleRadius(5f),
-                        PropertyFactory.circleColor(MColors.Bg.toArgb()),
-                        PropertyFactory.circleStrokeColor(MColors.Accent.toArgb()),
+                        PropertyFactory.circleColor(MColors.Dark.bg.toArgb()),
+                        PropertyFactory.circleStrokeColor(MColors.Dark.accent.toArgb()),
                         PropertyFactory.circleStrokeWidth(2.5f),
                     )
                 )
