@@ -99,6 +99,7 @@ fun SummaryScreen(
     var confirmDiscard by rememberSaveable { mutableStateOf(false) }
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
     var renaming by rememberSaveable { mutableStateOf(false) }
+    var editing by rememberSaveable { mutableStateOf(false) }
     var gpxNote by remember { mutableStateOf<String?>(null) }
     var mediaBusy by remember { mutableStateOf(false) }
     val detailsFlush = remember(record.id) { DetailsFlush() }
@@ -340,6 +341,14 @@ fun SummaryScreen(
                         Spacer(Modifier.height(10.dp))
                     }
                     PillButton(
+                        "Edit activity",
+                        icon = MIcons.Edit,
+                        filled = false,
+                        onClick = { editing = true },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    PillButton(
                         "Export GPX file",
                         icon = MIcons.Download,
                         filled = false,
@@ -403,6 +412,9 @@ fun SummaryScreen(
             onConfirm = { newTitle -> renaming = false; onRename(newTitle) },
             onDismiss = { renaming = false },
         )
+    }
+    if (editing && !isNew) {
+        EditActivityDialog(record = record, onDismiss = { editing = false })
     }
     if (confirmDelete) {
         ConfirmDialog(

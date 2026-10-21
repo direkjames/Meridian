@@ -40,7 +40,7 @@ A private, offline-first fitness tracker for Android. No accounts, no feed, and 
 - **Notes, effort (1 to 10) and how you felt** on every activity; the coach notices when several sessions in a row were tough
 - **Matched routes**: "2nd fastest of 6 on this route" with your times on that route
 - New personal-best and **badge** cards the moment you finish
-- Rename, delete, export GPX, share
+- Rename, delete, export GPX, share, **change the sport** and **trim a forgotten start or stop** (with restore)
 
 **Plan** (training plans)
 - Pick the event, its date and distance (3K to marathon, or any distance)

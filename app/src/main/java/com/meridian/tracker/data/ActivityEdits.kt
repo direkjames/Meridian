@@ -37,6 +37,10 @@ object ActivityEdits {
         withContext(Dispatchers.IO) { ActivityMedia.delete(id, item) }
     }
 
+    suspend fun setSport(id: String, sport: com.meridian.tracker.tracking.Sport) {
+        edit(id) { r -> ActivityEditing.changeSport(r, sport) }
+    }
+
     suspend fun setNote(id: String, note: String) {
         val clean = ActivityDetails.cleanNote(note)
         edit(id) { r -> r.copy(note = clean) }
