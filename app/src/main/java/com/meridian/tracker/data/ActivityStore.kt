@@ -1,6 +1,8 @@
 package com.meridian.tracker.data
 
 import android.content.Context
+import android.util.JsonReader
+import android.util.JsonToken
 import android.util.Log
 import com.meridian.tracker.tracking.Sport
 import com.meridian.tracker.tracking.TrackPoint
@@ -92,6 +94,9 @@ object ActivityStore {
         }
     }
 
+    /** True when a snapshot of an unsaved activity is waiting on disk. */
+    fun hasInProgress(): Boolean = ::inProgressFile.isInitialized && inProgressFile.exists()
+
     fun clearInProgress() {
         snapshotScope.launch { inProgressFile.delete() }
     }
@@ -156,8 +161,12 @@ object ActivityStore {
             }
         }
         val ids = records.map { it.id }.toSet()
+        // After a big import the points stay on disk instead of piling up in memory.
+        val light = records.map { r ->
+            if (r.points is LazyTrack) r else withLazyPoints(r, File(dir, "${r.id}.json"), r.points.size)
+        }
         _activities.update { list ->
-            (list.filterNot { it.id in ids } + records).sortedByDescending { it.startTimeMs }
+            (list.filterNot { it.id in ids } + light).sortedByDescending { it.startTimeMs }
         }
     }
 
@@ -186,7 +195,7 @@ object ActivityStore {
         (dir.listFiles { f -> f.name.endsWith(".json") } ?: emptyArray())
             .mapNotNull { file ->
                 try {
-                    fromJson(JSONObject(file.readText()))
+                    readLight(file)
                 } catch (e: Exception) {
                     Log.w(TAG, "Skipping unreadable activity ${file.name}", e)
                     null
@@ -197,6 +206,78 @@ object ActivityStore {
                 }
             }
             .sortedByDescending { it.startTimeMs }
+
+    // ---- Light loading -------------------------------------------------------------------------
+    // Saved activities are kept in memory without their GPS points; the points are read from the
+    // activity's file the first time a screen needs them (see LazyTrack).
+
+    /** Reads an activity file while skipping its points, which stay on disk. */
+    private fun readLight(file: File): ActivityRecord {
+        var count = 0
+        val summary = JSONObject()
+        JsonReader(file.bufferedReader()).use { reader ->
+            reader.beginObject()
+            while (reader.hasNext()) {
+                val key = reader.nextName()
+                if (key == "points") {
+                    reader.beginArray()
+                    while (reader.hasNext()) { reader.skipValue(); count++ }
+                    reader.endArray()
+                } else {
+                    summary.put(key, readJsonValue(reader))
+                }
+            }
+            reader.endObject()
+        }
+        summary.put("points", JSONArray())
+        return withLazyPoints(fromJson(summary), file, count)
+    }
+
+    private fun withLazyPoints(record: ActivityRecord, file: File, count: Int): ActivityRecord =
+        record.copy(points = LazyTrack(count) { readPoints(file) })
+
+    private fun readJsonValue(reader: JsonReader): Any? = when (reader.peek()) {
+        JsonToken.BEGIN_OBJECT -> JSONObject().also { o ->
+            reader.beginObject()
+            while (reader.hasNext()) o.put(reader.nextName(), readJsonValue(reader))
+            reader.endObject()
+        }
+        JsonToken.BEGIN_ARRAY -> JSONArray().also { a ->
+            reader.beginArray()
+            while (reader.hasNext()) a.put(readJsonValue(reader))
+            reader.endArray()
+        }
+        JsonToken.STRING -> reader.nextString()
+        JsonToken.BOOLEAN -> reader.nextBoolean()
+        JsonToken.NULL -> { reader.nextNull(); JSONObject.NULL }
+        // Whole numbers stay Long so ids, times and counts keep their exact value.
+        else -> reader.nextString().let { s -> s.toLongOrNull() ?: s.toDouble() }
+    }
+
+    /** Streams just the points of one activity file. */
+    private fun readPoints(file: File): List<TrackPoint> {
+        JsonReader(file.bufferedReader()).use { reader ->
+            reader.beginObject()
+            while (reader.hasNext()) {
+                if (reader.nextName() != "points") { reader.skipValue(); continue }
+                val out = ArrayList<TrackPoint>()
+                reader.beginArray()
+                while (reader.hasNext()) {
+                    reader.beginArray()
+                    val lat = reader.nextDouble()
+                    val lon = reader.nextDouble()
+                    val alt = if (reader.peek() == JsonToken.NULL) { reader.nextNull(); null } else reader.nextDouble()
+                    val time = reader.nextLong()
+                    val segment = reader.nextInt()
+                    reader.endArray()
+                    out.add(TrackPoint(lat, lon, alt, time, segment))
+                }
+                reader.endArray()
+                return out
+            }
+        }
+        return emptyList()
+    }
 
     private fun toJson(r: ActivityRecord): JSONObject = JSONObject().apply {
         put("v", 1)

@@ -3,6 +3,8 @@
     <string name="app_name">Meridian</string>
     <string name="channel_tracking">Recording</string>
     <string name="channel_tracking_desc">Shows your live stats while Meridian records an activity.</string>
+    <string name="channel_alerts">Recording alerts</string>
+    <string name="channel_alerts_desc">Tells you if Android stopped Meridian in the middle of an activity.</string>
     <string name="channel_plan">Training plan</string>
     <string name="channel_plan_desc">Daily reminders for your training plan sessions.</string>
 
