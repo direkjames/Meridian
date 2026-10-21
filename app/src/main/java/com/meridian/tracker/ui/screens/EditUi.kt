@@ -71,7 +71,7 @@ fun EditActivityDialog(record: ActivityRecord, onDismiss: () -> Unit) {
                 Text("SPORT", style = MType.Label)
                 Spacer(Modifier.height(8.dp))
                 Segmented(
-                    options = Sport.entries.map { it.label },
+                    options = Sport.entries.map { it.short },
                     selected = Sport.entries.indexOf(record.sport).coerceAtLeast(0),
                     onSelect = { i -> scope.launch { ActivityEdits.setSport(record.id, Sport.entries[i]) } },
                     modifier = Modifier.fillMaxWidth(),

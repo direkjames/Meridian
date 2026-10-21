@@ -79,13 +79,16 @@ object Calories {
         val kmh = (speedMps * 3.6).coerceAtLeast(0.0)
         return when (sport) {
             Sport.RUN -> max(5.5, min(kmh, 20.0))
+            Sport.TRAIL_RUN -> max(6.0, min(kmh * 1.05, 20.0))
             Sport.WALK -> lerp(WALK_TABLE, kmh)
+            Sport.HIKE -> lerp(HIKE_TABLE, kmh)
             Sport.RIDE -> lerp(RIDE_TABLE, kmh)
         }
     }
 
     // (km/h, METs) from the Compendium of Physical Activities, joined by straight lines.
     private val WALK_TABLE = listOf(2.0 to 2.0, 3.2 to 2.8, 4.0 to 3.0, 4.8 to 3.5, 5.6 to 4.3, 6.4 to 5.0, 8.0 to 7.0)
+    private val HIKE_TABLE = listOf(2.0 to 3.5, 3.0 to 4.5, 4.0 to 5.3, 5.0 to 6.0, 6.0 to 6.8)
     private val RIDE_TABLE = listOf(8.0 to 3.0, 16.0 to 4.5, 19.0 to 6.8, 22.0 to 8.0, 25.0 to 10.0, 30.0 to 12.0, 35.0 to 15.0)
 
     private fun lerp(table: List<Pair<Double, Double>>, x: Double): Double {

@@ -26,7 +26,7 @@ import kotlin.math.pow
  */
 object Effort {
 
-    private val DEFAULT_THRESHOLD = mapOf(Sport.RUN to 3.0, Sport.RIDE to 7.0, Sport.WALK to 1.7)
+    private val DEFAULT_THRESHOLD = mapOf(Sport.RUN to 3.0, Sport.RIDE to 7.0, Sport.WALK to 1.7, Sport.TRAIL_RUN to 2.6, Sport.HIKE to 1.4)
 
     /** Your sustainable hard speed (m/s) per sport, from your history. */
     fun thresholds(records: List<ActivityRecord>): Map<Sport, Double> = Sport.entries.associateWith { sport ->

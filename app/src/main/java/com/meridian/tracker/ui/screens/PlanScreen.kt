@@ -179,7 +179,7 @@ private fun PlanSetup(onCancel: () -> Unit, onCreate: (TrainingPlan) -> Unit) {
     // Sensible defaults from your history: how far and how fast you usually go.
     val relevant = remember(activities, mode) {
         val since = System.currentTimeMillis() - 45L * 86_400_000L
-        activities.filter { it.startTimeMs >= since && (if (mode == PlanMode.RUN) it.sport == Sport.RUN else it.sport != Sport.RIDE) }
+        activities.filter { it.startTimeMs >= since && (if (mode == PlanMode.RUN) it.sport.isRunning else it.sport != Sport.RIDE) }
     }
     var currentLongM by rememberSaveable(modeName) {
         mutableDoubleStateOf((relevant.maxOfOrNull { it.distanceM } ?: 2_000.0).coerceIn(1_000.0, 30_000.0).let { (it / 500).toInt() * 500.0 })

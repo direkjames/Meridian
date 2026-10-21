@@ -71,7 +71,8 @@ object TrackFormats {
 
     fun writeGpx(record: ActivityRecord): String {
         val type = when (record.sport) {
-            Sport.RUN -> "running"
+            Sport.RUN, Sport.TRAIL_RUN -> "running"
+            Sport.HIKE -> "hiking"
             Sport.RIDE -> "cycling"
             Sport.WALK -> "walking"
         }

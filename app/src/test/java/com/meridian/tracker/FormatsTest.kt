@@ -136,9 +136,11 @@ class FormatsTest {
         assertEquals("Run, then coffee", map["activities/111.gpx"]!!.name)
         assertEquals("Ride", map["activities/222.fit.gz"]!!.type)
         assertEquals(Sport.RIDE, RecordBuilder.sportFrom("E-Bike Ride"))
-        assertEquals(Sport.WALK, RecordBuilder.sportFrom("Hike"))
+        assertEquals(Sport.HIKE, RecordBuilder.sportFrom("Hike"))
+        assertEquals(Sport.WALK, RecordBuilder.sportFrom("Walking"))
         assertNull(RecordBuilder.sportFrom("Yoga"))
-        assertNotNull(RecordBuilder.sportFrom("Trail Run"))
+        assertEquals(Sport.TRAIL_RUN, RecordBuilder.sportFrom("Trail Run"))
+        assertEquals(Sport.RUN, RecordBuilder.sportFrom("Running"))
     }
 }
 

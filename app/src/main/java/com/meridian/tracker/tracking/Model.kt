@@ -12,10 +12,20 @@ enum class Sport(
     val showsSpeed: Boolean,
     /** Kalman process noise (m/s): how quickly the position estimate may change. */
     val processNoise: Double,
+    /** Compact name for chip selectors; falls back to [label]. */
+    shortLabel: String? = null,
 ) {
     RUN("Run", maxSpeed = 12.0, movingSpeed = 0.8, showsSpeed = false, processNoise = 3.0),
-    RIDE("Ride", maxSpeed = 30.0, movingSpeed = 1.5, showsSpeed = true, processNoise = 5.0),
-    WALK("Walk", maxSpeed = 5.0, movingSpeed = 0.4, showsSpeed = false, processNoise = 2.0);
+    TRAIL_RUN("Trail run", maxSpeed = 10.0, movingSpeed = 0.5, showsSpeed = false, processNoise = 3.5, shortLabel = "Trail"),
+    WALK("Walk", maxSpeed = 5.0, movingSpeed = 0.4, showsSpeed = false, processNoise = 2.0),
+    HIKE("Hike", maxSpeed = 4.5, movingSpeed = 0.3, showsSpeed = false, processNoise = 2.5),
+    RIDE("Ride", maxSpeed = 30.0, movingSpeed = 1.5, showsSpeed = true, processNoise = 5.0);
+
+    val short: String = shortLabel ?: label
+
+    /** Running-type sports share pace-based targets, plans and training load. */
+    val isRunning: Boolean get() = this == RUN || this == TRAIL_RUN
+    val isWalking: Boolean get() = this == WALK || this == HIKE
 }
 
 /** One recorded point on the route. [segment] changes after every pause. */

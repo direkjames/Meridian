@@ -1,5 +1,7 @@
 package com.meridian.tracker.ui.screens
 
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -120,7 +122,7 @@ fun ActivitiesScreen(onOpen: (String) -> Unit) {
 
 @Composable
 private fun FilterRow(selected: Sport?, onSelect: (Sport?) -> Unit, modifier: Modifier = Modifier) {
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         FilterChip("All", selected == null) { onSelect(null) }
         Sport.entries.forEach { sport ->
             FilterChip(sport.label, selected == sport) { onSelect(sport) }

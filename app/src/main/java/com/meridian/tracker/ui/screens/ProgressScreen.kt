@@ -129,7 +129,7 @@ fun ProgressScreen(
         value = withContext(Dispatchers.Default) {
             val thresholds = Effort.thresholds(all)
             val fitnessDays = Fitness.series(records, today, thresholds = thresholds)
-            val predictSport = if (filter == Sport.WALK) Sport.WALK else Sport.RUN
+            val predictSport = if (filter?.isWalking == true) Sport.WALK else Sport.RUN
             Insights(
                 fitness = fitnessDays.takeLast(90),
                 weekly = Fitness.weeklyLoads(fitnessDays, today, 8),
