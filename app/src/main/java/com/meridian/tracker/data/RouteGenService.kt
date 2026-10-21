@@ -26,6 +26,16 @@ object RouteGenService {
         }
     }
 
+    /** Up to four different routes, or the reason there are none. [onProgress] reports how many are found so far. */
+    suspend fun planChoices(request: RouteRequest, onProgress: (Int) -> Unit = {}): RouteGen.Choices {
+        var first = true
+        return RouteGen.planChoices(request, { waypoints ->
+            if (!first) delay(SPACING_MS)
+            first = false
+            fetch(request.profile, waypoints)
+        }, onProgress)
+    }
+
     private suspend fun fetch(profile: RouteProfile, waypoints: List<Pair<Double, Double>>): RouteAnswer = withContext(Dispatchers.IO) {
         runCatching {
             val conn = URL(RouteGen.url(profile, waypoints)).openConnection() as HttpURLConnection

@@ -105,35 +105,121 @@ object RouteGen {
         return if (r.shape == RouteShape.OUT_AND_BACK) path + path.dropLast(1).reversed() else path
     }
 
-    /**
-     * Asks [router] for routes, resizing the shape each time, and returns the one closest to the
-     * target. At most [MAX_REQUESTS] calls, since the service is free and shared.
-     */
-    suspend fun plan(r: RouteRequest, router: suspend (List<Pair<Double, Double>>) -> RouteAnswer): PlanResult {
-        if (!valid(r)) return PlanResult.Invalid
-        var bearing = r.bearingDeg
-        var size = firstGuess(r)
+    /** One finished search: the answer, and the size that produced the best route (a good start for the next direction). */
+    private class Search(val result: PlanResult, val size: Double, val used: Int)
+
+    private suspend fun search(
+        r: RouteRequest,
+        bearing0: Double,
+        size0: Double,
+        maxRequests: Int,
+        router: suspend (List<Pair<Double, Double>>) -> RouteAnswer,
+    ): Search {
+        var bearing = bearing0
+        var size = size0
         var best: RouteAnswer.Ok? = null
+        var bestSize = size0
         var bestError = Double.MAX_VALUE
-        repeat(MAX_REQUESTS) {
-            when (val answer = router(waypoints(r, bearing, size))) {
+        var used = 0
+        while (used < maxRequests) {
+            used++
+            val tried = size
+            when (val answer = router(waypoints(r, bearing, tried))) {
                 is RouteAnswer.Ok -> {
                     val total = totalM(r, answer)
                     if (total <= 0.0 || answer.points.size < 2) {
                         size *= 2
                     } else {
                         val error = abs(total - r.targetM) / r.targetM
-                        if (error < bestError) { best = answer; bestError = error }
-                        if (error <= TOLERANCE) return success(r, answer, true)
+                        if (error < bestError) { best = answer; bestError = error; bestSize = tried }
+                        if (error <= TOLERANCE) return Search(success(r, answer, true), tried, used)
                         // Distance grows with size, so scale by how far off we were (not too wildly).
                         size *= (r.targetM / total).coerceIn(0.5, 2.0)
                     }
                 }
                 RouteAnswer.NoRoute -> bearing += 120.0 // try another direction
-                RouteAnswer.Unreachable -> return PlanResult.Offline
+                RouteAnswer.Unreachable -> return Search(PlanResult.Offline, size, used)
             }
         }
-        return best?.let { success(r, it, false) } ?: PlanResult.NoPath
+        return Search(best?.let { success(r, it, false) } ?: PlanResult.NoPath, bestSize, used)
+    }
+
+    /**
+     * Asks [router] for routes, resizing the shape each time, and returns the one closest to the
+     * target. At most [MAX_REQUESTS] calls, since the service is free and shared.
+     */
+    suspend fun plan(r: RouteRequest, router: suspend (List<Pair<Double, Double>>) -> RouteAnswer): PlanResult {
+        if (!valid(r)) return PlanResult.Invalid
+        return search(r, r.bearingDeg, firstGuess(r), MAX_REQUESTS, router).result
+    }
+
+    /** A route choice. [bearingDeg] is the direction it was planned to head in. */
+    class Choice(val points: List<Pair<Double, Double>>, val distanceM: Double, val bearingDeg: Double)
+
+    /** What [planChoices] found: [choices] (best first by closeness to the target) or, when empty, why not. */
+    class Choices(val choices: List<Choice>, val failure: PlanResult?)
+
+    const val WANTED_CHOICES = 4
+    /** Everything one "plan" may ask the shared service for, however many directions it tries. */
+    const val MAX_CHOICE_REQUESTS = 14
+    /** Later directions reuse the size the first one learned, so they need fewer tries. */
+    private const val LATER_REQUESTS = 3
+    private const val SAME_ROUTE_RADIUS_M = 60.0
+    private const val SAME_ROUTE_SHARE = 0.8
+
+    /**
+     * Plans up to [WANTED_CHOICES] different routes of about the target length by heading in
+     * different directions (90° apart, then 45° between if some came out the same). Stops after
+     * [MAX_CHOICE_REQUESTS] requests. [onProgress] gets the number of choices found so far.
+     */
+    suspend fun planChoices(
+        r: RouteRequest,
+        router: suspend (List<Pair<Double, Double>>) -> RouteAnswer,
+        onProgress: (Int) -> Unit = {},
+    ): Choices {
+        if (!valid(r)) return Choices(emptyList(), PlanResult.Invalid)
+        val good = ArrayList<Choice>()
+        var fallback: Choice? = null
+        var size = firstGuess(r)
+        var used = 0
+        var failure: PlanResult = PlanResult.NoPath
+        // 4 directions 90° apart, then 2 in between to replace any that were the same route.
+        val offsets = listOf(0.0, 90.0, 180.0, 270.0, 45.0, 225.0, 135.0, 315.0)
+        for ((k, offset) in offsets.withIndex()) {
+            if (good.size >= WANTED_CHOICES || used >= MAX_CHOICE_REQUESTS) break
+            val cap = minOf(if (k == 0) MAX_REQUESTS else LATER_REQUESTS, MAX_CHOICE_REQUESTS - used)
+            val bearing = (r.bearingDeg + offset) % 360.0
+            val found = search(r, bearing, size, cap, router)
+            used += found.used
+            when (val result = found.result) {
+                is PlanResult.Success -> {
+                    size = found.size
+                    val choice = Choice(result.points, result.distanceM, bearing)
+                    if (result.withinTolerance) {
+                        if (good.none { sameRoute(it.points, choice.points) }) {
+                            good += choice
+                            onProgress(good.size)
+                        }
+                    } else if (fallback == null || closeness(r, choice) < closeness(r, fallback)) {
+                        fallback = choice
+                    }
+                }
+                PlanResult.Offline -> { failure = PlanResult.Offline; break }
+                else -> Unit
+            }
+        }
+        val list = good.ifEmpty { listOfNotNull(fallback) }
+        return if (list.isEmpty()) Choices(emptyList(), failure) else Choices(list.sortedBy { closeness(r, it) }, null)
+    }
+
+    private fun closeness(r: RouteRequest, c: Choice) = abs(c.distanceM - r.targetM)
+
+    /** True when most of [a] runs along [b], so showing both would look like one route twice. */
+    fun sameRoute(a: List<Pair<Double, Double>>, b: List<Pair<Double, Double>>): Boolean {
+        if (a.size < 2 || b.size < 2) return false
+        val sample = thin(a, 40)
+        val near = sample.count { p -> b.any { q -> Geo.distanceM(p.first, p.second, q.first, q.second) <= SAME_ROUTE_RADIUS_M } }
+        return near >= sample.size * SAME_ROUTE_SHARE
     }
 
     private fun success(r: RouteRequest, answer: RouteAnswer.Ok, exact: Boolean): PlanResult {
