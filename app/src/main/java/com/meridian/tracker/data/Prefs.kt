@@ -30,6 +30,10 @@ object Prefs {
     /** A backup file the user picked (can be in Google Drive). Rewritten after every change. */
     val autoBackupUri: StateFlow<String?> = _autoBackupUri.asStateFlow()
 
+    private val _backupVideos = MutableStateFlow(false)
+    /** Also copy videos into the automatic backup (they can be large). Manual backups always include them. */
+    val backupVideos: StateFlow<Boolean> = _backupVideos.asStateFlow()
+
     private val _lastBackupMs = MutableStateFlow(0L)
     val lastBackupMs: StateFlow<Long> = _lastBackupMs.asStateFlow()
 
@@ -64,6 +68,7 @@ object Prefs {
         _keepScreenOn.value = sp.getBoolean("keepScreenOn", false)
         _countdown.value = sp.getBoolean("countdown", true)
         _autoBackupUri.value = sp.getString("autoBackupUri", null)
+        _backupVideos.value = sp.getBoolean("backupVideos", false)
         _lastBackupMs.value = sp.getLong("lastBackupMs", 0L)
         _countSteps.value = sp.getBoolean("countSteps", true)
         _askedSteps.value = sp.getBoolean("askedSteps", false)
@@ -132,6 +137,11 @@ object Prefs {
     fun setAutoBackupUri(uri: String?) {
         _autoBackupUri.value = uri
         sp.edit().putString("autoBackupUri", uri).apply()
+    }
+
+    fun setBackupVideos(v: Boolean) {
+        _backupVideos.value = v
+        sp.edit().putBoolean("backupVideos", v).apply()
     }
 
     fun setLastBackup(ms: Long) {

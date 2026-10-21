@@ -7,6 +7,7 @@ A private, offline-first fitness tracker for Android. No accounts, no feed, and 
 **Recording**
 - Runs, rides and walks with GPS that keeps going with the screen off, a live notification, a 3-2-1 countdown, pause, hold-to-finish and a pocket lock
 - Clean distance: Kalman smoothing, spike rejection and stationary-drift filtering
+- **Pause and Resume from the notification**, so you can control a run from the lock screen
 - Live distance, time, pace (or speed), climb, average pace and moving time; barometer elevation when available
 - **Follow a route** you drew, with a dashed line on the map, distance to go and an off-route alert
 - **Race your ghost**: your previous effort on the same route, shown as a dot on the map and "+12 s ahead"
@@ -68,7 +69,7 @@ A private, offline-first fitness tracker for Android. No accounts, no feed, and 
 
 **Your data**
 - Import your **Strava archive ZIP** (GPX / TCX / FIT, names and sports kept), or single files
-- Export GPX (one activity or all), backups and restore (photos and videos included in manual backups; automatic backups keep photos), **automatic backup** to a file you pick (Google Drive works), and Android's Google backup
+- Export GPX (one activity or all), backups and restore (photos and videos included in manual backups; automatic backups keep photos, and videos too if you switch it on), **automatic backup** to a file you pick (Google Drive works), and Android's Google backup
 - Kilometres or miles, GPS accuracy, keep screen on, countdown, background-recording check
 
 ## Build and install

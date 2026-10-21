@@ -33,6 +33,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -51,6 +52,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.meridian.tracker.data.ActivityStore
 import com.meridian.tracker.data.DataTransfer
+import com.meridian.tracker.data.ActivityMedia
 import com.meridian.tracker.data.Prefs
 import com.meridian.tracker.ui.components.CircleIconButton
 import com.meridian.tracker.ui.components.HorizontalHairline
@@ -59,7 +61,9 @@ import com.meridian.tracker.ui.components.SectionCard
 import com.meridian.tracker.ui.components.Segmented
 import com.meridian.tracker.ui.theme.MColors
 import com.meridian.tracker.ui.theme.MType
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -78,6 +82,11 @@ fun SettingsScreen(onBack: () -> Unit, onOpenOfflineMaps: () -> Unit, onOpenSens
     val autoBackup by Prefs.autoBackupUri.collectAsStateWithLifecycle()
     val lastBackup by Prefs.lastBackupMs.collectAsStateWithLifecycle()
     val backupError by DataTransfer.backupError.collectAsStateWithLifecycle()
+    val backupVideos by Prefs.backupVideos.collectAsStateWithLifecycle()
+    // Reading the media folders is disk work, so it happens off the main thread.
+    val mediaSizes by produceState(0L to 0L) {
+        value = withContext(Dispatchers.IO) { ActivityMedia.sizes() }
+    }
     val importStatus by DataTransfer.importStatus.collectAsStateWithLifecycle()
     val activities by ActivityStore.activities.collectAsStateWithLifecycle()
 
@@ -272,6 +281,20 @@ fun SettingsScreen(onBack: () -> Unit, onOpenOfflineMaps: () -> Unit, onOpenSens
                         if (on) autoBackupPicker.launch("Meridian backup.zip") else DataTransfer.disableAutoBackup(context)
                     }
                     HorizontalHairline()
+                    ToggleRow(
+                        "Include videos in automatic backup",
+                        if (mediaSizes.second > 0) {
+                            "Your videos use ${formatBytes(mediaSizes.second)}, copied again after every activity. " +
+                                "Photos are always included."
+                        } else {
+                            "Photos are always included. Turn this on to copy videos too."
+                        },
+                        backupVideos,
+                    ) { on ->
+                        Prefs.setBackupVideos(on)
+                        if (autoBackup != null) DataTransfer.scheduleAutoBackup(context)
+                    }
+                    HorizontalHairline()
                     LinkRow("Back up now", "Save a full backup file anywhere you like.", icon = MIcons.Download) {
                         backupPicker.launch("Meridian backup ${java.time.LocalDate.now()}.zip")
                     }
@@ -295,7 +318,7 @@ fun SettingsScreen(onBack: () -> Unit, onOpenOfflineMaps: () -> Unit, onOpenSens
                     Text("Meridian ${versionName(context)}", style = MType.Heading)
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "${activities.size} activities · ${formatBytes(ActivityStore.storageBytes())} on this phone. " +
+                        "${activities.size} activities · ${formatBytes(ActivityStore.storageBytes() + mediaSizes.first + mediaSizes.second)} on this phone. " +
                             "No account, no feed, no tracking.",
                         style = MType.Body,
                     )

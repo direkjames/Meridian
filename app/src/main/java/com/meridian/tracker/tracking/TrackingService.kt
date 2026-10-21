@@ -118,6 +118,9 @@ class TrackingService : Service() {
         when (intent?.action) {
             ACTION_START -> startTracking()
             ACTION_STOP -> stopTracking()
+            // Buttons on the recording notification (work from the lock screen).
+            ACTION_PAUSE -> if (tracking) { TrackingManager.pause(); updateNotification() }
+            ACTION_RESUME -> if (tracking) { TrackingManager.resume(); updateNotification() }
             else -> if (!tracking) {
                 // A null intent means Android killed Meridian mid-recording and restarted this
                 // service. Background restarts can't get location back, so tell the user instead
@@ -129,7 +132,10 @@ class TrackingService : Service() {
             }
         }
         // Sticky so Android hands the service back after killing it (see above).
-        return if (intent?.action == ACTION_START) START_STICKY else START_NOT_STICKY
+        return when (intent?.action) {
+            ACTION_START, ACTION_PAUSE, ACTION_RESUME -> START_STICKY
+            else -> START_NOT_STICKY
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -309,7 +315,16 @@ class TrackingService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 
+        // Pause while recording, Resume while paused.
+        val toggle = PendingIntent.getService(
+            this,
+            2,
+            Intent(this, TrackingService::class.java).setAction(if (paused) ACTION_RESUME else ACTION_PAUSE),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+
         return NotificationCompat.Builder(this, MeridianApp.CHANNEL_TRACKING)
+            .addAction(0, if (paused) "Resume" else "Pause", toggle)
             .setSmallIcon(R.drawable.ic_stat_meridian)
             .setColor(ContextCompat.getColor(this, R.color.accent))
             .setContentTitle(title)
@@ -327,6 +342,8 @@ class TrackingService : Service() {
     companion object {
         const val ACTION_START = "com.meridian.tracker.action.START"
         const val ACTION_STOP = "com.meridian.tracker.action.STOP"
+        const val ACTION_PAUSE = "com.meridian.tracker.action.PAUSE"
+        const val ACTION_RESUME = "com.meridian.tracker.action.RESUME"
         private const val NOTIFICATION_ID = 42
         private const val NOTIFICATION_ID_INTERRUPTED = 43
         private const val NOTIFICATION_REFRESH_MS = 3_000L

@@ -384,7 +384,7 @@ object DataTransfer {
     }
 
     suspend fun backupNowTo(context: Context, uri: Uri): Boolean = try {
-        writeBackup(context, uri, includeVideos = false)
+        writeBackup(context, uri, includeVideos = Prefs.backupVideos.value)
         Prefs.setLastBackup(System.currentTimeMillis())
         _backupError.value = null
         true
