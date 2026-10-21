@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.hardware.Sensor
 import android.hardware.SensorManager
+import com.meridian.tracker.data.ActivityMedia
 import com.meridian.tracker.data.ActivityStore
 import com.meridian.tracker.data.DataTransfer
 import com.meridian.tracker.data.ExtrasStore
@@ -26,6 +27,7 @@ class MeridianApp : Application() {
         super.onCreate()
         Prefs.init(this)
         MapLibre.getInstance(this)
+        ActivityMedia.init(this)
         ActivityStore.init(this)
         ActivityStore.onChanged = { DataTransfer.scheduleAutoBackup(this) }
         ExtrasStore.init(this)

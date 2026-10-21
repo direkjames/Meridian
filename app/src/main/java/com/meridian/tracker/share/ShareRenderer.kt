@@ -4,16 +4,21 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.LinearGradient
 import android.graphics.Path
+import android.graphics.Rect
 import android.graphics.RectF
+import android.graphics.Shader
 import android.graphics.Typeface
 import androidx.core.content.res.ResourcesCompat
 import com.meridian.tracker.R
+import com.meridian.tracker.data.ActivityMedia
 import com.meridian.tracker.data.ActivityRecord
 import com.meridian.tracker.data.Period
 import com.meridian.tracker.data.Review
 import com.meridian.tracker.tracking.TrackPoint
 import com.meridian.tracker.ui.Format
+import java.io.File
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -42,7 +47,12 @@ data class ShareOptions(
     val ink: Ink = Ink.WHITE,
     val showRoute: Boolean = true,
     val shadow: Boolean = true,
-)
+    /** One of the activity's photos as the background, or null for a see-through sticker. */
+    val photoPath: String? = null,
+) {
+    /** True when the saved PNG keeps a see-through background. */
+    val transparent: Boolean get() = layout.transparent && photoPath == null
+}
 
 /**
  * Draws share images with the plain Android canvas at 1080 px wide, so what you see in the
@@ -72,12 +82,70 @@ object ShareRenderer {
 
     fun render(context: Context, record: ActivityRecord, options: ShareOptions): Bitmap {
         val fonts = Fonts(context)
-        return when (options.layout) {
+        val photo = options.photoPath?.let { loadPhoto(it) }
+        if (options.layout == ShareLayout.CARD) return card(fonts, record, options, photo)
+        val sticker = when (options.layout) {
             ShareLayout.STATS -> stats(fonts, record, options)
             ShareLayout.ROUTE -> route(fonts, record, options)
-            ShareLayout.MINIMAL -> minimal(fonts, record, options)
-            ShareLayout.CARD -> card(fonts, record, options)
+            else -> minimal(fonts, record, options)
         }
+        return if (photo != null) onPhoto(sticker, photo, options) else sticker
+    }
+
+    // ---- Photo backgrounds --------------------------------------------------------------------
+
+    private const val STORY_H = 1920
+
+    /** The last decoded background, so changing ink or layout doesn't decode the photo again. */
+    private var photoCache: Pair<String, Bitmap>? = null
+
+    @Synchronized
+    private fun loadPhoto(path: String): Bitmap? {
+        photoCache?.let { (p, b) -> if (p == path && !b.isRecycled) return b }
+        val bmp = ActivityMedia.decodeFile(File(path), STORY_H) ?: return null
+        photoCache = path to bmp
+        return bmp
+    }
+
+    /** Draws [photo] to fill [dst], cropping the overflow from the centre. */
+    private fun drawCover(c: Canvas, photo: Bitmap, dst: RectF) {
+        val scale = max(dst.width() / photo.width, dst.height() / photo.height)
+        val srcW = dst.width() / scale
+        val srcH = dst.height() / scale
+        val left = (photo.width - srcW) / 2f
+        val top = (photo.height - srcH) / 2f
+        val src = Rect(left.toInt(), top.toInt(), (left + srcW).toInt(), (top + srcH).toInt())
+        c.drawBitmap(photo, src, dst, Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG))
+    }
+
+    /** A story-sized image: the photo, a soft fade for legibility, and the sticker at the bottom. */
+    private fun onPhoto(sticker: Bitmap, photo: Bitmap, o: ShareOptions): Bitmap {
+        val bmp = Bitmap.createBitmap(W, STORY_H, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        c.drawColor(BG)
+        drawCover(c, photo, RectF(0f, 0f, W.toFloat(), STORY_H.toFloat()))
+
+        // Dark fade behind light ink, light fade behind black ink.
+        val fade = if (o.ink == Ink.BLACK) 0x8CFFFFFF.toInt() else 0xA6000000.toInt()
+        val fadeTop = STORY_H * 0.38f
+        c.drawRect(
+            0f, fadeTop, W.toFloat(), STORY_H.toFloat(),
+            Paint().apply { shader = LinearGradient(0f, fadeTop, 0f, STORY_H.toFloat(), fade and 0x00FFFFFF, fade, Shader.TileMode.CLAMP) },
+        )
+
+        val maxH = STORY_H * 0.62f
+        val k = min(1f, maxH / sticker.height)
+        val w = sticker.width * k
+        val h = sticker.height * k
+        val bottom = STORY_H - 96f
+        c.drawBitmap(
+            sticker,
+            null,
+            RectF((W - w) / 2f, bottom - h, (W + w) / 2f, bottom),
+            Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG),
+        )
+        sticker.recycle()
+        return bmp
     }
 
     private fun stats(f: Fonts, r: ActivityRecord, o: ShareOptions): Bitmap {
@@ -98,9 +166,10 @@ object ShareRenderer {
 
         val big = paint(f.bold, 280f, ink, o, spacing = -0.04f, tnum = true)
         val km = Format.km(r.distanceM)
+        val unit = paint(f.regular, 92f, ink, o, alpha = 0.85f)
+        fitHero(big, unit, km, W - 2 * PAD)
         y += -big.fontMetrics.ascent * 0.92f
         c.drawText(km, PAD, y, big)
-        val unit = paint(f.regular, 92f, ink, o, alpha = 0.85f)
         c.drawText(" ${Format.distUnit}", PAD + big.measureText(km), y, unit)
         y += 70f
 
@@ -135,13 +204,17 @@ object ShareRenderer {
 
         val big = paint(f.bold, 160f, ink, o, spacing = -0.03f, tnum = true)
         val km = Format.km(r.distanceM)
+        val unit = paint(f.regular, 64f, ink, o, alpha = 0.85f)
+        fitHero(big, unit, km, W - 2 * PAD)
         y += -big.fontMetrics.ascent * 0.92f
         c.drawText(km, PAD, y, big)
-        c.drawText(" ${Format.distUnit}", PAD + big.measureText(km), y, paint(f.regular, 64f, ink, o, alpha = 0.85f))
+        c.drawText(" ${Format.distUnit}", PAD + big.measureText(km), y, unit)
         y += 64f
         val line = paint(f.mono, 36f, ink, o, spacing = 0.12f, alpha = 0.85f)
+        val text = "${r.sport.label.uppercase()}  ·  ${Format.duration(r.movingMs)}  ·  ${paceOrSpeed(r).uppercase()}"
+        fitLine(line, text, W - 2 * PAD, minSize = 26f)
         y += 36f
-        c.drawText("${r.sport.label.uppercase()}  ·  ${Format.duration(r.movingMs)}  ·  ${paceOrSpeed(r).uppercase()}", PAD, y, line)
+        c.drawText(text, PAD, y, line)
         return crop(bmp, (y + PAD).toInt())
     }
 
@@ -158,6 +231,7 @@ object ShareRenderer {
         y += 20f
 
         val big = paint(f.bold, 320f, ink, o, spacing = -0.05f, tnum = true).apply { textAlign = Paint.Align.CENTER }
+        fitLine(big, Format.km(r.distanceM), W - 2 * PAD, minSize = 160f)
         y += -big.fontMetrics.ascent * 0.9f
         c.drawText(Format.km(r.distanceM), cx, y, big)
         y += 60f
@@ -168,36 +242,46 @@ object ShareRenderer {
         y += 40f
 
         val sub = paint(f.regular, 54f, ink, o, alpha = 0.85f).apply { textAlign = Paint.Align.CENTER }
+        val subText = "${Format.duration(r.movingMs)}  ·  ${paceOrSpeed(r)}"
+        fitLine(sub, subText, W - 2 * PAD, minSize = 36f)
         y += 54f
-        c.drawText("${Format.duration(r.movingMs)}  ·  ${paceOrSpeed(r)}", cx, y, sub)
+        c.drawText(subText, cx, y, sub)
         return crop(bmp, (y + PAD).toInt())
     }
 
-    private fun card(f: Fonts, r: ActivityRecord, o: ShareOptions): Bitmap {
+    private fun card(f: Fonts, r: ActivityRecord, o: ShareOptions, photo: Bitmap? = null): Bitmap {
         val h = 1350
         val bmp = Bitmap.createBitmap(W, h, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
         val plain = o.copy(shadow = false)
         c.drawColor(BG)
 
-        // Route panel with a faint grid
+        // Route panel: your photo, or a faint grid
         val panel = RectF(0f, 0f, W.toFloat(), 600f)
-        c.drawRect(panel, Paint().apply { color = SURFACE })
-        val grid = Paint().apply { color = HAIRLINE; strokeWidth = 2f }
-        var gx = 0f
-        while (gx < W) { c.drawLine(gx, 0f, gx, panel.bottom, grid); gx += 72f }
-        var gy = 0f
-        while (gy < panel.bottom) { c.drawLine(0f, gy, W.toFloat(), gy, grid); gy += 72f }
-        if (r.points.size >= 2) {
+        if (photo != null) {
+            drawCover(c, photo, panel)
+            c.drawRect(
+                0f, panel.bottom - 220f, W.toFloat(), panel.bottom,
+                Paint().apply { shader = LinearGradient(0f, panel.bottom - 220f, 0f, panel.bottom, BG and 0x00FFFFFF, BG, Shader.TileMode.CLAMP) },
+            )
+        } else {
+            c.drawRect(panel, Paint().apply { color = SURFACE })
+            val grid = Paint().apply { color = HAIRLINE; strokeWidth = 2f }
+            var gx = 0f
+            while (gx < W) { c.drawLine(gx, 0f, gx, panel.bottom, grid); gx += 72f }
+            var gy = 0f
+            while (gy < panel.bottom) { c.drawLine(0f, gy, W.toFloat(), gy, grid); gy += 72f }
+        }
+        if (r.points.size >= 2 && (photo == null || o.showRoute)) {
             drawRoute(c, r.points, RectF(PAD + 40f, 64f, W - PAD - 40f, panel.bottom - 64f), ACCENT, 14f, glow = true)
         }
 
         var y = panel.bottom + 64f
         y += 32f
-        c.drawText(
-            "${r.sport.label.uppercase()} · ${dateLong(r.startTimeMs).uppercase()}",
-            PAD, y, paint(f.mono, 32f, MUTED, plain, spacing = 0.16f),
-        )
+        val dateLine = "${r.sport.label.uppercase()} · ${dateLong(r.startTimeMs).uppercase()}"
+        val datePaint = paint(f.mono, 32f, MUTED, plain, spacing = 0.16f)
+        fitLine(datePaint, dateLine, W - 2 * PAD, minSize = 24f)
+        c.drawText(dateLine, PAD, y, datePaint)
         y += 18f
         val title = paint(f.bold, 64f, INK, plain)
         y += 64f
@@ -205,9 +289,11 @@ object ShareRenderer {
 
         val big = paint(f.bold, 190f, if (o.ink == Ink.YELLOW) ACCENT else INK, plain, spacing = -0.04f, tnum = true)
         val km = Format.km(r.distanceM)
+        val unit = paint(f.regular, 70f, MUTED, plain)
+        fitHero(big, unit, km, W - 2 * PAD)
         y += 30f + -big.fontMetrics.ascent * 0.9f
         c.drawText(km, PAD, y, big)
-        c.drawText(" ${Format.distUnit}", PAD + big.measureText(km), y, paint(f.regular, 70f, MUTED, plain))
+        c.drawText(" ${Format.distUnit}", PAD + big.measureText(km), y, unit)
         y += 56f
 
         statRow(c, f, plain.copy(ink = Ink.WHITE), r, y, labelColor = MUTED, valueColor = INK)
@@ -238,10 +324,16 @@ object ShareRenderer {
         )
         val label = paint(f.mono, 32f, labelColor, o, spacing = 0.18f, alpha = if (labelColor == o.ink.argb) 0.8f else 1f)
         val value = paint(f.bold, 100f, valueColor, o, spacing = -0.02f, tnum = true)
+        // Long times such as 3:27:52 used to run into the pace column; columns now make room.
+        val layout = StatLayout.columns(PAD, col * 3, baseSize = 100f, minSize = 60f, minGap = 44f) { size ->
+            value.textSize = size
+            items.map { (l, v) -> max(label.measureText(l), value.measureText(v)) }
+        }
+        value.textSize = layout.size
         items.forEachIndexed { i, (l, v) ->
-            val x = PAD + i * col
+            val x = layout.xs[i]
             c.drawText(l, x, top + 32f, label)
-            c.drawText(v, x, top + 32f + 18f + 96f, value)
+            c.drawText(v, x, top + 32f + 18f + 96f * (layout.size / 100f), value)
         }
     }
 
@@ -284,6 +376,9 @@ object ShareRenderer {
             val x = PAD + (i % 2) * colW
             val top = 920f + (i / 2) * 250f
             c.drawText(l, x, top, label)
+            value.textSize = 108f
+            unit.textSize = 48f
+            fitHero(value, unit, v, colW - 32f, u?.let { " $it" } ?: "")
             c.drawText(v, x, top + 130f, value)
             if (u != null) c.drawText(" $u", x + value.measureText(v), top + 130f, unit)
         }
@@ -339,6 +434,27 @@ object ShareRenderer {
         if (o.shadow && o.layout.transparent) {
             val shadowColor = if (o.ink == Ink.BLACK) 0x66FFFFFF else 0x8C000000.toInt()
             setShadowLayer(size * 0.06f + 6f, 0f, size * 0.015f + 2f, shadowColor)
+        }
+    }
+
+    /** Shrinks a big number and its unit together until both fit in [maxWidth]. */
+    private fun fitHero(big: Paint, unit: Paint, text: String, maxWidth: Float, unitText: String = " ${Format.distUnit}") {
+        val base = big.textSize
+        val ratio = unit.textSize / base
+        val size = StatLayout.fit(base, base * 0.45f, maxWidth) { s ->
+            big.textSize = s
+            unit.textSize = s * ratio
+            big.measureText(text) + unit.measureText(unitText)
+        }
+        big.textSize = size
+        unit.textSize = size * ratio
+    }
+
+    /** Shrinks one line of text until it fits in [maxWidth]. */
+    private fun fitLine(p: Paint, text: String, maxWidth: Float, minSize: Float) {
+        p.textSize = StatLayout.fit(p.textSize, minSize, maxWidth) { s ->
+            p.textSize = s
+            p.measureText(text)
         }
     }
 

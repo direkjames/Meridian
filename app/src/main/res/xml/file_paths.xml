@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <cache-path name="shares" path="shares/" />
+    <!-- Photos and videos the camera writes before they're added to an activity -->
+    <cache-path name="capture" path="capture/" />
+    <!-- Activity photos and videos, opened in the phone's own player -->
+    <files-path name="media" path="media/" />
 </paths>

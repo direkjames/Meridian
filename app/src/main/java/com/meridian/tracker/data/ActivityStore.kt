@@ -14,6 +14,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -41,12 +43,25 @@ object ActivityStore {
 
     private val loaded = CompletableDeferred<Unit>()
 
+    /** Serialises writes, so an edit (photos, gear, rename) never overwrites another one. */
+    private val writeLock = Mutex()
+
     fun init(context: Context) {
         dir = File(context.filesDir, "activities").apply { mkdirs() }
         inProgressFile = File(context.filesDir, "in_progress.json")
         scope.launch {
             _activities.value = loadAll()
             loaded.complete(Unit)
+            // Photos left behind by an activity that no longer exists (e.g. the app was closed
+            // while a discarded draft was on screen).
+            runCatching {
+                val keep = (dir.listFiles() ?: emptyArray())
+                    .filter { it.name.endsWith(".json") }
+                    .map { it.name.removeSuffix(".json") }
+                    .toMutableSet()
+                loadInProgress()?.let { keep.add(it.id) }
+                ActivityMedia.cleanupOrphans(keep)
+            }.onFailure { Log.w(TAG, "Media cleanup failed", it) }
         }
     }
 
@@ -89,9 +104,24 @@ object ActivityStore {
         }
     }
 
-    suspend fun rename(id: String, title: String) {
-        val record = find(id) ?: return
-        save(record.copy(title = title))
+    suspend fun rename(id: String, title: String) = update(id) { it.copy(title = title) }
+
+    /**
+     * Changes one saved activity based on its latest version on disk. Returns the new version,
+     * or null if the activity no longer exists.
+     */
+    suspend fun update(id: String, transform: (ActivityRecord) -> ActivityRecord): ActivityRecord? {
+        val result = writeLock.withLock {
+            withContext(Dispatchers.IO) {
+                val current = _activities.value.firstOrNull { it.id == id } ?: return@withContext null
+                val next = transform(current)
+                if (next == current) return@withContext current
+                writeLocked(listOf(next))
+                next
+            }
+        }
+        if (result != null) onChanged?.invoke()
+        return result
     }
 
     /** Called after any saved activity changes (used for automatic backups). */
@@ -103,24 +133,29 @@ object ActivityStore {
     /** Saves many at once (imports, restores) with a single list update. */
     suspend fun saveAll(records: List<ActivityRecord>) {
         if (records.isEmpty()) return
-        withContext(Dispatchers.IO) {
-            records.forEach { record ->
-                val tmp = File(dir, "${record.id}.json.tmp")
-                tmp.writeText(toJson(record).toString())
-                tmp.renameTo(File(dir, "${record.id}.json"))
-            }
-            val ids = records.map { it.id }.toSet()
-            _activities.update { list ->
-                (list.filterNot { it.id in ids } + records).sortedByDescending { it.startTimeMs }
-            }
-        }
+        writeLock.withLock { withContext(Dispatchers.IO) { writeLocked(records) } }
         onChanged?.invoke()
     }
 
+    private fun writeLocked(records: List<ActivityRecord>) {
+        records.forEach { record ->
+            val tmp = File(dir, "${record.id}.json.tmp")
+            tmp.writeText(toJson(record).toString())
+            tmp.renameTo(File(dir, "${record.id}.json"))
+        }
+        val ids = records.map { it.id }.toSet()
+        _activities.update { list ->
+            (list.filterNot { it.id in ids } + records).sortedByDescending { it.startTimeMs }
+        }
+    }
+
     suspend fun delete(id: String) {
-        withContext(Dispatchers.IO) {
-            File(dir, "$id.json").delete()
-            _activities.update { list -> list.filterNot { it.id == id } }
+        writeLock.withLock {
+            withContext(Dispatchers.IO) {
+                File(dir, "$id.json").delete()
+                _activities.update { list -> list.filterNot { it.id == id } }
+                ActivityMedia.deleteAll(id)
+            }
         }
         onChanged?.invoke()
     }
@@ -176,6 +211,37 @@ object ActivityStore {
         if (r.cadence.isNotEmpty()) put("cad", samplesToJson(r.cadence, r.startTimeMs))
         r.steps?.let { put("steps", it) }
         r.source?.let { put("source", it) }
+        if (r.media.isNotEmpty()) put("media", JSONArray().apply {
+            r.media.forEach { m ->
+                put(JSONObject().put("id", m.id).put("kind", m.kind.name).put("file", m.file).put("added", m.addedMs))
+            }
+        })
+        if (r.gearIds.isNotEmpty()) put("gear", JSONArray(r.gearIds))
+    }
+
+    private fun mediaFromJson(o: JSONObject): List<MediaItem> {
+        val a = o.optJSONArray("media") ?: return emptyList()
+        return List(a.length()) { i ->
+            runCatching {
+                val m = a.getJSONObject(i)
+                MediaItem(
+                    id = m.getString("id"),
+                    kind = MediaKind.valueOf(m.getString("kind")),
+                    file = m.getString("file"),
+                    addedMs = m.optLong("added", 0L),
+                )
+            }.getOrNull()
+        }
+            .filterNotNull()
+            // A backup from somewhere else must never point outside the media folder.
+            .filter { ActivityMedia.isSafeFileName(it.file) }
+            .distinctBy { it.id }
+            .take(ActivityMedia.MAX_PER_ACTIVITY)
+    }
+
+    private fun gearFromJson(o: JSONObject): List<String> {
+        val a = o.optJSONArray("gear") ?: return emptyList()
+        return List(a.length()) { a.optString(it) }.filter { it.isNotBlank() }.distinct()
     }
 
     private fun samplesToJson(samples: List<Sample>, start: Long) = JSONArray().apply {
@@ -221,6 +287,8 @@ object ActivityStore {
             cadence = samplesFromJson(o, "cad", o.getLong("start")),
             steps = if (o.has("steps")) o.optInt("steps") else null,
             source = if (o.has("source")) o.optString("source") else null,
+            media = mediaFromJson(o),
+            gearIds = gearFromJson(o),
         )
     }
 }

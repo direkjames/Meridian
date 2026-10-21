@@ -14,6 +14,8 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -40,7 +42,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -60,7 +64,8 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.meridian.tracker.data.ActivityStore
@@ -140,6 +145,8 @@ fun RecordScreen(onOpenSettings: () -> Unit, onOpenRouteBuilder: () -> Unit, onO
 
     var follow by rememberSaveable { mutableStateOf(true) }
     var locked by rememberSaveable { mutableStateOf(false) }
+    // Drag the handle down (or tap it) for a smaller panel and more map; up to bring details back.
+    var collapsed by rememberSaveable { mutableStateOf(false) }
     var countdown by rememberSaveable { mutableStateOf<Int?>(null) }
     val countdownEnabled by Prefs.countdown.collectAsStateWithLifecycle()
     val keepScreenOn by Prefs.keepScreenOn.collectAsStateWithLifecycle()
@@ -257,21 +264,14 @@ fun RecordScreen(onOpenSettings: () -> Unit, onOpenRouteBuilder: () -> Unit, onO
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .onSizeChanged { panelHeightPx = it.height }
-                .clip(RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp))
+                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
                 .background(MColors.Surface)
-                .border(1.dp, MColors.Hairline, RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp))
+                .border(1.dp, MColors.Hairline, RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
                 .navigationBarsPadding()
-                .padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 20.dp),
+                .animateContentSize(tween(220))
+                .padding(start = 20.dp, end = 20.dp, bottom = 14.dp),
         ) {
-            // grabber
-            Box(
-                Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .size(width = 36.dp, height = 4.dp)
-                    .clip(CircleShape)
-                    .background(MColors.Stroke)
-            )
-            Spacer(Modifier.height(18.dp))
+            PanelHandle(collapsed = collapsed, onToggle = { collapsed = it })
 
             AnimatedContent(
                 targetState = state.status == RecordStatus.IDLE,
@@ -281,6 +281,7 @@ fun RecordScreen(onOpenSettings: () -> Unit, onOpenRouteBuilder: () -> Unit, onO
                 if (idle) {
                     IdlePanel(
                         state = state,
+                        collapsed = collapsed,
                         quality = quality,
                         weekDistanceM = activities.filter { it.startTimeMs >= startOfWeekMs() }.sumOf { it.distanceM },
                         weekCount = activities.count { it.startTimeMs >= startOfWeekMs() },
@@ -293,6 +294,7 @@ fun RecordScreen(onOpenSettings: () -> Unit, onOpenRouteBuilder: () -> Unit, onO
                 } else {
                     LivePanel(
                         state = state,
+                        collapsed = collapsed,
                         guide = guide,
                         live = live,
                         now = now,
@@ -326,11 +328,66 @@ fun RecordScreen(onOpenSettings: () -> Unit, onOpenRouteBuilder: () -> Unit, onO
     }
 }
 
+// ---- Panel handle ------------------------------------------------------------------------------
+
+/** The grabber: tap it, or drag it down / up, to make the panel smaller or bigger. */
+@Composable
+private fun PanelHandle(collapsed: Boolean, onToggle: (Boolean) -> Unit) {
+    val haptics = LocalHapticFeedback.current
+    val current by rememberUpdatedState(collapsed)
+    var drag by remember { mutableFloatStateOf(0f) }
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(26.dp)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = Role.Button,
+                onClickLabel = if (collapsed) "Show more" else "Show less",
+            ) {
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onToggle(!collapsed)
+            }
+            .pointerInput(Unit) {
+                detectVerticalDragGestures(
+                    onDragStart = { drag = 0f },
+                    onDragEnd = {
+                        val threshold = 24.dp.toPx()
+                        if (drag > threshold && !current) {
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onToggle(true)
+                        } else if (drag < -threshold && current) {
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onToggle(false)
+                        }
+                        drag = 0f
+                    },
+                    onDragCancel = { drag = 0f },
+                    onVerticalDrag = { change, amount ->
+                        change.consume()
+                        drag += amount
+                    },
+                )
+            }
+            .semantics { stateDescription = if (collapsed) "Compact" else "Expanded" },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier
+                .size(width = 40.dp, height = 4.dp)
+                .clip(CircleShape)
+                .background(if (collapsed) MColors.Accent.copy(alpha = 0.7f) else MColors.Stroke)
+        )
+    }
+}
+
 // ---- Idle --------------------------------------------------------------------------------------
 
 @Composable
 private fun IdlePanel(
     state: TrackingState,
+    collapsed: Boolean,
     quality: GpsQuality,
     weekDistanceM: Double,
     weekCount: Int,
@@ -340,37 +397,51 @@ private fun IdlePanel(
     onPickRoute: () -> Unit,
     onStart: () -> Unit,
 ) {
+    val ready = quality == GpsQuality.GOOD || quality == GpsQuality.STRONG
     Column(Modifier.fillMaxWidth()) {
         SportSelector(state.sport, onSelect = TrackingManager::setSport, modifier = Modifier.fillMaxWidth())
-        Spacer(Modifier.height(26.dp))
-        StartButton(ready = quality == GpsQuality.GOOD || quality == GpsQuality.STRONG, onStart = onStart)
-        Spacer(Modifier.height(14.dp))
-        Text(
-            when (quality) {
-                GpsQuality.SEARCHING -> "Finding GPS. Step outside for a faster lock."
-                GpsQuality.WEAK -> "GPS signal is weak. Recording will tidy up once it improves."
-                else -> "GPS locked. You're ready to go."
-            },
-            style = MType.Body.copy(fontSize = MType.Body.fontSize * 0.9f),
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.height(18.dp))
-        GuideChips(guide, onPickRoute)
-        if (hr.device != null) {
-            Spacer(Modifier.height(8.dp))
-            HeartChip(hr, onClick = onOpenSensors)
-        }
-        Spacer(Modifier.height(16.dp))
-        HorizontalHairline()
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(10.dp))
+        // Status on the left, START on the right: everything within thumb reach, no scrolling.
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("THIS WEEK", style = MType.Label, modifier = Modifier.weight(1f))
-            Text(Format.km(weekDistanceM), style = MType.Number)
-            Text(" ${Format.distUnit}", style = MType.Unit)
-            Text("  ·  ", style = MType.Unit)
-            Text("$weekCount", style = MType.Number)
-            Text(if (weekCount == 1) " activity" else " activities", style = MType.Unit)
+            Column(Modifier.weight(1f)) {
+                Text(
+                    when (quality) {
+                        GpsQuality.SEARCHING -> "FINDING GPS"
+                        GpsQuality.WEAK -> "WEAK GPS"
+                        else -> "GPS LOCKED"
+                    },
+                    style = MType.Label.copy(color = if (ready) MColors.Accent else MColors.Danger),
+                )
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    when (quality) {
+                        GpsQuality.SEARCHING -> "Step outside for a faster lock."
+                        GpsQuality.WEAK -> "Recording tidies up once it improves."
+                        else -> "You're ready to go."
+                    },
+                    style = MType.Body.copy(fontSize = MType.Body.fontSize * 0.9f, lineHeight = MType.Body.lineHeight * 0.9f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(10.dp))
+                Text("THIS WEEK", style = MType.Label.copy(color = MColors.Faint))
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(Format.km(weekDistanceM), style = MType.Number)
+                    Text(" ${Format.distUnit}", style = MType.Unit)
+                    Text("  ·  $weekCount", style = MType.Number.copy(color = MColors.Muted))
+                    Text(if (weekCount == 1) " activity" else " activities", style = MType.Unit, maxLines = 1)
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            StartButton(ready = ready, onStart = onStart)
+        }
+        if (!collapsed) {
+            Spacer(Modifier.height(10.dp))
+            GuideChips(guide, onPickRoute)
+            if (hr.device != null) {
+                Spacer(Modifier.height(8.dp))
+                HeartChip(hr, onClick = onOpenSensors)
+            }
         }
     }
 }
@@ -385,36 +456,34 @@ private fun StartButton(ready: Boolean, onStart: () -> Unit) {
         animationSpec = infiniteRepeatable(tween(1800), RepeatMode.Restart),
         label = "ring",
     )
-    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+    Box(
+        Modifier
+            .size(104.dp)
+            .drawBehind {
+                if (ready) {
+                    val base = size.minDimension / 2 * 0.76f
+                    drawCircle(
+                        color = MColors.Accent.copy(alpha = 0.35f * (1f - t)),
+                        radius = base + (size.minDimension / 2 - base) * t,
+                        style = Stroke(2.dp.toPx()),
+                    )
+                }
+            },
+        contentAlignment = Alignment.Center,
+    ) {
         Box(
             Modifier
-                .size(132.dp)
-                .drawBehind {
-                    if (ready) {
-                        val base = size.minDimension / 2 * 0.72f
-                        drawCircle(
-                            color = MColors.Accent.copy(alpha = 0.35f * (1f - t)),
-                            radius = base + (size.minDimension / 2 - base) * t,
-                            style = Stroke(2.dp.toPx()),
-                        )
-                    }
-                },
+                .size(84.dp)
+                .clip(CircleShape)
+                .background(MColors.Accent)
+                .clickable(role = Role.Button, onClickLabel = "Start recording") {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onStart()
+                }
+                .semantics { contentDescription = "Start recording" },
             contentAlignment = Alignment.Center,
         ) {
-            Box(
-                Modifier
-                    .size(96.dp)
-                    .clip(CircleShape)
-                    .background(MColors.Accent)
-                    .clickable(role = Role.Button, onClickLabel = "Start recording") {
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onStart()
-                    }
-                    .semantics { contentDescription = "Start recording" },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("START", style = MType.Button.copy(color = MColors.OnAccent, letterSpacing = MType.Wordmark.letterSpacing * 0.6f))
-            }
+            Text("START", style = MType.Button.copy(color = MColors.OnAccent, letterSpacing = MType.Wordmark.letterSpacing * 0.6f))
         }
     }
 }
@@ -424,6 +493,7 @@ private fun StartButton(ready: Boolean, onStart: () -> Unit) {
 @Composable
 private fun LivePanel(
     state: TrackingState,
+    collapsed: Boolean,
     guide: Guide,
     live: GuideLive,
     now: Long,
@@ -438,84 +508,95 @@ private fun LivePanel(
         null
     }
     val avgSpeed = if (state.movingMs > 0) state.distanceM / (state.movingMs / 1000.0) else 0.0
+    val hero = MType.Hero.copy(fontSize = 68.sp, lineHeight = 70.sp, letterSpacing = (-2.5).sp)
 
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             StatusChip(paused = paused, sportLabel = state.sport.label)
             Spacer(Modifier.weight(1f))
             if (!paused && !locked) {
-                CircleIconButton(MIcons.Lock, "Lock screen", onClick = onLock, size = 44.dp)
+                CircleIconButton(MIcons.Lock, "Lock screen", onClick = onLock, size = 40.dp)
             } else {
-                Spacer(Modifier.size(44.dp))
+                Spacer(Modifier.size(40.dp))
             }
         }
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(4.dp))
 
-        Row(verticalAlignment = Alignment.Bottom) {
-            Text(
-                Format.km(state.distanceM),
-                style = MType.Hero.copy(color = if (paused) MColors.Muted else MColors.Text),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(Format.distUnit, style = MType.Unit.copy(fontSize = MType.Unit.fontSize * 1.3f), modifier = Modifier.padding(bottom = 12.dp))
+        // Distance with the pause button beside it, so the big control sits right under your thumb.
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.Bottom) {
+                Text(
+                    Format.km(state.distanceM),
+                    style = hero.copy(color = if (paused) MColors.Muted else MColors.Text),
+                    maxLines = 1,
+                    softWrap = false,
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(Format.distUnit, style = MType.Unit.copy(fontSize = MType.Unit.fontSize * 1.2f), modifier = Modifier.padding(bottom = 10.dp))
+            }
+            if (!paused && !locked) {
+                Spacer(Modifier.width(8.dp))
+                PauseButton(onPause = TrackingManager::pause)
+            }
         }
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(8.dp))
         HorizontalHairline()
         Row(
             Modifier
                 .fillMaxWidth()
                 .height(IntrinsicSize.Min)
-                .padding(vertical = 16.dp),
+                .padding(vertical = 12.dp),
         ) {
             StatCell("Time", Format.duration(state.elapsedMs(now)), null, Modifier.weight(1f))
-            VerticalHairline(Modifier.padding(horizontal = 12.dp))
+            VerticalHairline(Modifier.padding(horizontal = 10.dp))
             if (state.sport.showsSpeed) {
                 StatCell("Speed", Format.speedKmh(state.currentSpeed), Format.speedUnit, Modifier.weight(1f))
             } else {
                 StatCell("Pace", Format.paceFromSpeed(state.currentSpeed), Format.paceUnit, Modifier.weight(1f))
             }
-            VerticalHairline(Modifier.padding(horizontal = 12.dp))
+            VerticalHairline(Modifier.padding(horizontal = 10.dp))
             StatCell("Climb", Format.meters(state.elevationGainM), "m", Modifier.weight(1f))
         }
-        HorizontalHairline()
-        Spacer(Modifier.height(12.dp))
-        Row(Modifier.fillMaxWidth()) {
-            Text(
-                if (state.sport.showsSpeed) "AVG ${Format.speedKmh(avgSpeed)} ${Format.speedUnit.uppercase()}" else "AVG ${Format.pace(avgPace)} ${Format.paceUnit.uppercase()}",
-                style = MType.Label,
-                modifier = Modifier.weight(1f),
-            )
-            Text("MOVING ${Format.duration(state.movingMs)}", style = MType.Label)
+        if (!collapsed) {
+            HorizontalHairline()
+            Spacer(Modifier.height(10.dp))
+            Row(Modifier.fillMaxWidth()) {
+                Text(
+                    if (state.sport.showsSpeed) "AVG ${Format.speedKmh(avgSpeed)} ${Format.speedUnit.uppercase()}" else "AVG ${Format.pace(avgPace)} ${Format.paceUnit.uppercase()}",
+                    style = MType.Label,
+                    modifier = Modifier.weight(1f),
+                )
+                Text("MOVING ${Format.duration(state.movingMs)}", style = MType.Label)
+            }
+            BodyRow(state, sensorPaired)
         }
-        BodyRow(state, sensorPaired)
+        // The route / ghost / target guide stays visible even when compact: it's what you follow.
         LiveGuide(state, guide, live)
-        Spacer(Modifier.height(22.dp))
 
-        Box(Modifier.fillMaxWidth().height(84.dp), contentAlignment = Alignment.Center) {
-            when {
-                locked -> Unit // the lock overlay draws its own control here
-                paused -> Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    PillButton(
-                        "Resume",
-                        onClick = TrackingManager::resume,
-                        icon = MIcons.Play,
-                        modifier = Modifier.weight(1f),
-                        height = 64.dp,
-                    )
-                    HoldButton(
-                        "Hold to finish",
-                        onConfirm = TrackingManager::finish,
-                        icon = MIcons.Flag,
-                        modifier = Modifier.weight(1f),
-                        height = 64.dp,
-                    )
-                }
-                else -> PauseButton(onPause = TrackingManager::pause)
+        if (paused && !locked) {
+            Spacer(Modifier.height(14.dp))
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                PillButton(
+                    "Resume",
+                    onClick = TrackingManager::resume,
+                    icon = MIcons.Play,
+                    modifier = Modifier.weight(1f),
+                    height = 58.dp,
+                )
+                HoldButton(
+                    "Hold to finish",
+                    onConfirm = TrackingManager::finish,
+                    icon = MIcons.Flag,
+                    modifier = Modifier.weight(1f),
+                    height = 58.dp,
+                )
             }
         }
+        // Room for the lock screen's "Hold to unlock" button, so it never covers your stats.
+        if (locked) Spacer(Modifier.height(88.dp))
     }
 }
 
@@ -590,7 +671,7 @@ private fun PauseButton(onPause: () -> Unit) {
     val haptics = LocalHapticFeedback.current
     Box(
         Modifier
-            .size(84.dp)
+            .size(72.dp)
             .clip(CircleShape)
             .background(MColors.Accent)
             .clickable(role = Role.Button, onClickLabel = "Pause") {
@@ -600,7 +681,7 @@ private fun PauseButton(onPause: () -> Unit) {
             .semantics { contentDescription = "Pause" },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(MIcons.Pause, contentDescription = null, tint = MColors.OnAccent, modifier = Modifier.size(32.dp))
+        Icon(MIcons.Pause, contentDescription = null, tint = MColors.OnAccent, modifier = Modifier.size(28.dp))
     }
 }
 

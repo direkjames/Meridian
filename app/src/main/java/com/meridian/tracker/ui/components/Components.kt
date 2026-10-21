@@ -79,7 +79,10 @@ fun StatCell(label: String, value: String, unit: String?, modifier: Modifier = M
         Text(label.uppercase(), style = MType.Label)
         Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.Bottom) {
-            Text(value, style = if (big) MType.BigNumber else MType.BigNumber.copy(fontSize = MType.BigNumber.fontSize * 0.8f))
+            val base = if (big) MType.BigNumber else MType.BigNumber.copy(fontSize = MType.BigNumber.fontSize * 0.8f)
+            // Long values such as 3:27:52 step down a size instead of wrapping into the next column.
+            val style = if (value.length >= 7) base.copy(fontSize = base.fontSize * 0.82f) else base
+            Text(value, style = style, maxLines = 1, softWrap = false)
             if (unit != null) {
                 Spacer(Modifier.width(4.dp))
                 Text(unit, style = MType.Unit, modifier = Modifier.padding(bottom = 3.dp))

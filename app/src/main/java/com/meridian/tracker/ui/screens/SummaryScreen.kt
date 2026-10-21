@@ -100,6 +100,8 @@ fun SummaryScreen(
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
     var renaming by rememberSaveable { mutableStateOf(false) }
     var gpxNote by remember { mutableStateOf<String?>(null) }
+    var mediaBusy by remember { mutableStateOf(false) }
+    var saveNote by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val gpxPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/gpx+xml")) { uri ->
@@ -275,6 +277,11 @@ fun SummaryScreen(
                     EffortRow(ex.effort, ex.effortFromHeart)
                 }
 
+                Spacer(Modifier.height(28.dp))
+                GearSection(record, isNew = isNew, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(28.dp))
+                MediaSection(record, onBusyChange = { mediaBusy = it }, modifier = Modifier.fillMaxWidth())
+
                 if (profile.samples.isNotEmpty()) {
                     Spacer(Modifier.height(32.dp))
                     ProfileCharts(profile, record.sport, Modifier.fillMaxWidth())
@@ -302,11 +309,19 @@ fun SummaryScreen(
                             modifier = Modifier.weight(1f),
                         )
                         PillButton(
-                            "Save activity",
-                            onClick = { onSave(title.trim().ifEmpty { record.title }) },
+                            if (mediaBusy) "Adding photos…" else "Save activity",
+                            onClick = {
+                                // Wait for photos/videos still being copied, so none are lost.
+                                if (mediaBusy) saveNote = "Hang on, still adding your photos"
+                                else onSave(title.trim().ifEmpty { record.title })
+                            },
                             icon = MIcons.Check,
                             modifier = Modifier.weight(1.6f),
                         )
+                    }
+                    saveNote?.takeIf { mediaBusy }?.let {
+                        Spacer(Modifier.height(10.dp))
+                        Text(it.uppercase(), style = MType.Label.copy(color = MColors.Accent))
                     }
                 } else {
                     if (record.points.size >= 2) {

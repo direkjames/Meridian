@@ -16,6 +16,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -55,7 +57,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.meridian.tracker.data.ActivityMedia
 import com.meridian.tracker.data.ActivityRecord
+import com.meridian.tracker.data.MediaItem
 import com.meridian.tracker.share.Ink
 import com.meridian.tracker.share.ShareActions
 import com.meridian.tracker.share.ShareLayout
@@ -84,9 +88,15 @@ fun ShareScreen(record: ActivityRecord, onBack: () -> Unit) {
     var showRoute by rememberSaveable { mutableStateOf(true) }
     var shadow by rememberSaveable { mutableStateOf(true) }
     var previewName by rememberSaveable { mutableStateOf(PreviewBg.PHOTO.name) }
+    var photoId by rememberSaveable(record.id) { mutableStateOf<String?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
 
-    val options = ShareOptions(ShareLayout.valueOf(layoutName), Ink.valueOf(inkName), showRoute, shadow)
+    // Your photos from this activity, any of which can be the background.
+    val photos = remember(record.id, record.media) { ActivityMedia.photos(record) }
+    val photo = photos.firstOrNull { it.id == photoId }
+    val photoPath = photo?.let { ActivityMedia.fileOf(record.id, it)?.path }
+
+    val options = ShareOptions(ShareLayout.valueOf(layoutName), Ink.valueOf(inkName), showRoute, shadow, photoPath)
     val previewBg = PreviewBg.valueOf(previewName)
 
     val bitmap by produceState<Bitmap?>(initialValue = null, record.id, options) {
@@ -100,9 +110,9 @@ fun ShareScreen(record: ActivityRecord, onBack: () -> Unit) {
         }
     }
 
-    val fileName = "meridian-${record.startTimeMs}-${options.layout.name.lowercase()}"
+    val fileName = "meridian-${record.startTimeMs}-${options.layout.name.lowercase()}${if (photoPath != null) "-photo" else ""}"
 
-    val transparent = options.layout.transparent
+    val transparent = options.transparent
 
     /** Saves the PNG; optionally opens Instagram afterwards, ready for the Photo sticker. */
     fun save(bmp: Bitmap, thenOpenInstagram: Boolean = false) {
@@ -146,7 +156,7 @@ fun ShareScreen(record: ActivityRecord, onBack: () -> Unit) {
                 .fillMaxWidth()
                 .weight(1f)
         ) {
-            PreviewBackground(previewBg, options.layout.transparent, Modifier.fillMaxSize())
+            PreviewBackground(previewBg, transparent, Modifier.fillMaxSize())
             Crossfade(targetState = bitmap, label = "preview", modifier = Modifier.fillMaxSize()) { bmp ->
                 if (bmp != null) {
                     Image(
@@ -169,7 +179,7 @@ fun ShareScreen(record: ActivityRecord, onBack: () -> Unit) {
             ) {
                 CircleIconButton(MIcons.Back, "Back", onClick = onBack)
                 Spacer(Modifier.weight(1f))
-                if (options.layout.transparent) {
+                if (transparent) {
                     Row(
                         Modifier
                             .clip(CircleShape)
@@ -235,11 +245,27 @@ fun ShareScreen(record: ActivityRecord, onBack: () -> Unit) {
                     Spacer(Modifier.width(10.dp))
                 }
                 Spacer(Modifier.weight(1f))
-                if (options.layout == ShareLayout.STATS) {
+                if (options.layout == ShareLayout.STATS || (options.layout == ShareLayout.CARD && photoPath != null)) {
                     ToggleChip("Route", showRoute) { showRoute = !showRoute }
                     Spacer(Modifier.width(8.dp))
                 }
                 if (options.layout.transparent) ToggleChip("Shadow", shadow) { shadow = !shadow }
+            }
+            if (photos.isNotEmpty()) {
+                Spacer(Modifier.height(14.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("PHOTO", style = MType.Label)
+                    Spacer(Modifier.width(12.dp))
+                    Row(
+                        Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        NoPhotoTile(selected = photo == null, onClick = { photoId = null })
+                        photos.forEach { p ->
+                            PhotoTile(record.id, p, selected = p.id == photo?.id, onClick = { photoId = p.id })
+                        }
+                    }
+                }
             }
             Spacer(Modifier.height(18.dp))
             PillButton(
@@ -285,6 +311,44 @@ fun ShareScreen(record: ActivityRecord, onBack: () -> Unit) {
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun NoPhotoTile(selected: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(12.dp)
+    Box(
+        Modifier
+            .size(48.dp)
+            .clip(shape)
+            .background(MColors.Surface2)
+            .border(2.dp, if (selected) MColors.Accent else MColors.Stroke, shape)
+            .clickable(role = Role.RadioButton, onClickLabel = "No photo", onClick = onClick)
+            .semantics { contentDescription = "No photo, see-through sticker" },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text("NONE", style = MType.Label.copy(fontSize = MType.Label.fontSize * 0.8f, color = if (selected) MColors.Accent else MColors.Muted))
+    }
+}
+
+@Composable
+private fun PhotoTile(activityId: String, item: MediaItem, selected: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(12.dp)
+    val thumb by produceState<Bitmap?>(initialValue = null, activityId, item.id) {
+        value = withContext(Dispatchers.IO) { ActivityMedia.thumbnail(activityId, item, 240) }
+    }
+    Box(
+        Modifier
+            .size(48.dp)
+            .clip(shape)
+            .background(MColors.Surface2)
+            .clickable(role = Role.RadioButton, onClickLabel = "Use this photo", onClick = onClick)
+            .semantics { contentDescription = "Photo background" },
+    ) {
+        thumb?.let {
+            Image(it.asImageBitmap(), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        }
+        Box(Modifier.fillMaxSize().border(2.dp, if (selected) MColors.Accent else Color.Transparent, shape))
     }
 }
 

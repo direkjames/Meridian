@@ -174,10 +174,12 @@ object HealthSync {
             .mapNotNull { r ->
                 val hr = runCatching { readHeartRate(client, r.startTimeMs, r.startTimeMs + r.elapsedMs, emptySet()) }
                     .getOrDefault(emptyList())
-                if (HeartRate.coverage(hr, r.elapsedMs) >= 0.3) r.copy(heartRate = hr) else null
+                if (HeartRate.coverage(hr, r.elapsedMs) >= 0.3) r.id to hr else null
             }
 
-        ActivityStore.saveAll(added + enriched)
+        ActivityStore.saveAll(added)
+        // Applied to the latest copy, so photos, gear or a rename made meanwhile are kept.
+        enriched.forEach { (id, hr) -> ActivityStore.update(id) { it.copy(heartRate = hr) } }
         Prefs.setHealthLastSync(now.toEpochMilli())
 
         if (added.isEmpty() && enriched.isEmpty()) return UP_TO_DATE

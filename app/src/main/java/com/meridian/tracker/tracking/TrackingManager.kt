@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import com.meridian.tracker.data.ActivityRecord
+import com.meridian.tracker.data.ActivityMedia
 import com.meridian.tracker.data.ActivityStore
 import com.meridian.tracker.data.HeartRate
 import com.meridian.tracker.data.PlannedRoute
@@ -205,6 +206,25 @@ object TrackingManager {
         _draft.value = null
         _draftRecovered.value = false
         ActivityStore.clearInProgress()
+    }
+
+    /** Changes the unsaved activity (photos, gear) and keeps the crash-safe copy in step. */
+    @Synchronized
+    fun updateDraft(transform: (ActivityRecord) -> ActivityRecord): ActivityRecord? {
+        val current = _draft.value ?: return null
+        val next = transform(current)
+        if (next == current) return current
+        _draft.value = next
+        ActivityStore.writeInProgress(next)
+        return next
+    }
+
+    /** Throws the unsaved activity away, with any photos or videos already added to it. */
+    @Synchronized
+    fun discardDraft() {
+        val id = _draft.value?.id
+        clearDraft()
+        if (id != null && ActivityStore.find(id) == null) ActivityMedia.deleteAll(id)
     }
 
     private fun buildRecord(s: TrackingState, now: Long): ActivityRecord {

@@ -62,6 +62,7 @@ import com.meridian.tracker.ui.screens.ReviewScreen
 import com.meridian.tracker.ui.screens.ShareScreen
 import com.meridian.tracker.ui.screens.SettingsScreen
 import com.meridian.tracker.ui.screens.SensorsScreen
+import com.meridian.tracker.ui.screens.GearScreen
 import com.meridian.tracker.data.HealthSync
 import com.meridian.tracker.ui.screens.PlanScreen
 import com.meridian.tracker.ui.screens.RouteBuilderScreen
@@ -142,6 +143,7 @@ private fun MeridianRoot() {
     var showOffline by rememberSaveable { mutableStateOf(false) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var showSensors by rememberSaveable { mutableStateOf(false) }
+    var showGear by rememberSaveable { mutableStateOf(false) }
     var shareTarget by rememberSaveable { mutableStateOf<String?>(null) } // "draft" or an activity id
     var showRouteBuilder by rememberSaveable { mutableStateOf(false) }
     var showHeatmap by rememberSaveable { mutableStateOf(false) }
@@ -157,6 +159,7 @@ private fun MeridianRoot() {
         reviewKey != null -> "review"
         showOffline -> "offline"
         showSensors -> "sensors"
+        showGear -> "gear"
         showSettings -> "settings"
         showRouteBuilder -> "routes"
         showHeatmap -> "heatmap"
@@ -202,13 +205,15 @@ private fun MeridianRoot() {
                                 onShare = { shareTarget = "draft" },
                                 onSave = { title ->
                                     scope.launch {
-                                        ActivityStore.save(record.copy(title = title))
+                                        // The latest draft, with every photo and gear pick made on this screen.
+                                        val latest = TrackingManager.draft.value?.takeIf { it.id == record.id } ?: record
+                                        ActivityStore.save(latest.copy(title = title))
                                         TrackingManager.clearDraft()
                                     }
                                 },
-                                onDiscard = { TrackingManager.clearDraft() },
-                                onClose = { TrackingManager.clearDraft() },
-                                onDelete = { TrackingManager.clearDraft() },
+                                onDiscard = { TrackingManager.discardDraft() },
+                                onClose = { TrackingManager.discardDraft() },
+                                onDelete = { TrackingManager.discardDraft() },
                             )
                         }
                         "detail" -> {
@@ -271,10 +276,12 @@ private fun MeridianRoot() {
                             if (record != null) ShareScreen(record = record, onBack = { shareTarget = null })
                         }
                         "sensors" -> SensorsScreen(onBack = { showSensors = false })
+                        "gear" -> GearScreen(onBack = { showGear = false })
                         "settings" -> SettingsScreen(
                             onBack = { showSettings = false },
                             onOpenOfflineMaps = { showOffline = true },
                             onOpenSensors = { showSensors = true },
+                            onOpenGear = { showGear = true },
                         )
                         else -> RecordScreen(
                             onOpenSettings = { showSettings = true },

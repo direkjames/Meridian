@@ -117,6 +117,38 @@ object MIcons {
         stroke("sync", "M4.5,12a7.5,7.5 0 0,1 13,-5", "M17.5,3v4h-4", "M19.5,12a7.5,7.5 0 0,1 -13,5", "M6.5,21v-4h4")
     }
     val Edit: ImageVector by lazy { stroke("edit", "M4,20h4L19,9l-4,-4L4,16z", "M13.5,6.5l4,4") }
+    val Plus: ImageVector by lazy { stroke("plus", "M12,5v14", "M5,12h14") }
+    val Camera: ImageVector by lazy {
+        stroke(
+            "camera",
+            "M4,8h3l1.5,-2.5h7L17,8h3a1,1 0 0,1 1,1v9a1,1 0 0,1 -1,1H4a1,1 0 0,1 -1,-1V9a1,1 0 0,1 1,-1z",
+            "M12,10a3.25,3.25 0 1,1 0,6.5a3.25,3.25 0 1,1 0,-6.5z",
+        )
+    }
+    val Video: ImageVector by lazy {
+        stroke("video", "M4,7h10a1,1 0 0,1 1,1v8a1,1 0 0,1 -1,1H4a1,1 0 0,1 -1,-1V8a1,1 0 0,1 1,-1z", "M15,10.5l6,-3.5v10l-6,-3.5")
+    }
+    val Gallery: ImageVector by lazy {
+        stroke(
+            "gallery",
+            "M5,4h14a1,1 0 0,1 1,1v14a1,1 0 0,1 -1,1H5a1,1 0 0,1 -1,-1V5a1,1 0 0,1 1,-1z",
+            "M4,16l4.5,-4.5 4,4 2.5,-2.5 5,5",
+            "M15.5,8.5h0.01",
+        )
+    }
+    /** A running shoe, for gear. */
+    val Shoe: ImageVector by lazy {
+        stroke("shoe", "M3,17v-6l4,-4 2,3h3l8,4a2,2 0 0,1 1,2v1H3z", "M3,17h18")
+    }
+    val Bike: ImageVector by lazy {
+        stroke(
+            "bike",
+            "M6,13a3.5,3.5 0 1,1 0,7a3.5,3.5 0 1,1 0,-7z",
+            "M18,13a3.5,3.5 0 1,1 0,7a3.5,3.5 0 1,1 0,-7z",
+            "M6,16.5l4,-7h6l2,7", "M10,9.5l2.5,7h-6.5", "M14,6h3",
+        )
+    }
+    val Warning: ImageVector by lazy { stroke("warning", "M12,4l9,16H3z", "M12,10v4", "M12,17h0.01") }
 
     private const val HEART =
         "M12,20C12,20 4.5,15.5 4.5,10A4.25,4.25 0 0,1 12,7.3A4.25,4.25 0 0,1 19.5,10C19.5,15.5 12,20 12,20z"
