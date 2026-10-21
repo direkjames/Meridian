@@ -314,6 +314,9 @@ object ActivityStore {
             }
         })
         if (r.gearIds.isNotEmpty()) put("gear", JSONArray(r.gearIds))
+        if (r.note.isNotBlank()) put("note", r.note)
+        r.perceivedEffort?.let { put("rpe", it) }
+        r.feeling?.let { put("feel", it.name) }
     }
 
     private fun mediaFromJson(o: JSONObject): List<MediaItem> {
@@ -386,6 +389,9 @@ object ActivityStore {
             source = if (o.has("source")) o.optString("source") else null,
             media = mediaFromJson(o),
             gearIds = gearFromJson(o),
+            note = ActivityDetails.cleanNote(o.optString("note", "")),
+            perceivedEffort = ActivityDetails.cleanEffort(if (o.has("rpe")) o.optInt("rpe") else null),
+            feeling = if (o.has("feel")) runCatching { Feeling.valueOf(o.getString("feel")) }.getOrNull() else null,
         )
     }
 }

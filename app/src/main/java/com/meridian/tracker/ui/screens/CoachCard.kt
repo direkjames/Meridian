@@ -175,7 +175,7 @@ private fun TipRow(tip: CoachTip) {
 }
 
 private fun iconFor(kind: TipKind): ImageVector = when (kind) {
-    TipKind.OVERREACH, TipKind.RAMP_UP, TipKind.REST_DAY -> MIcons.Warning
+    TipKind.OVERREACH, TipKind.RAMP_UP, TipKind.REST_DAY, TipKind.FEEL -> MIcons.Warning
     TipKind.GEAR -> MIcons.Shoe
     TipKind.STREAK -> MIcons.Trophy
     TipKind.WEEK -> MIcons.Chart

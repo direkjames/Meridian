@@ -21,7 +21,7 @@ enum class Readiness(val label: String) {
 
 enum class TipTone { INFO, GOOD, WARN }
 
-enum class TipKind { SESSION, OVERREACH, RAMP_UP, REST_DAY, STREAK, LONG, HYDRATION, RECOVERY, GEAR, COMEBACK, WEEK, LEARNING }
+enum class TipKind { FEEL, SESSION, OVERREACH, RAMP_UP, REST_DAY, STREAK, LONG, HYDRATION, RECOVERY, GEAR, COMEBACK, WEEK, LEARNING }
 
 data class CoachTip(val kind: TipKind, val tone: TipTone, val text: String)
 
@@ -202,6 +202,13 @@ object Coach {
                 "Streaks are great, but a rest day keeps this one going. Take one after $dayStreak days.",
             ))
         }
+        if (feelingStrain(past, nowMs)) {
+            tip(3, TipKind.FEEL, TipTone.WARN, pick(seed, "t-feel",
+                "You've logged tired or very hard sessions lately. Listen to that: an easy day now protects the next good block.",
+                "Your last few ratings say you're running on empty. Take it easy, or rest, before pushing again.",
+                "Tough ratings three sessions running. Back off for a day or two and your legs will thank you.",
+            ))
+        }
         val gearTip = gearTip(past, gear, imperial, seed)
         if (gearTip != null) tip(4, TipKind.GEAR, gearTip.first, gearTip.second)
 
@@ -352,6 +359,22 @@ object Coach {
             d = d.minusDays(1)
         }
         return n
+    }
+
+    /**
+     * True when at least two of the last three activities in the past week were rated very hard
+     * (8+ out of 10) or felt Tired or Hurting.
+     */
+    internal fun feelingStrain(past: List<ActivityRecord>, nowMs: Long): Boolean {
+        val recent = past
+            .filter { nowMs - it.startTimeMs <= 7 * 24 * HOUR_MS }
+            .sortedByDescending { it.startTimeMs }
+            .take(3)
+        if (recent.size < 3) return false
+        val strained = recent.count { r ->
+            r.feeling == Feeling.TIRED || r.feeling == Feeling.HURTING || (r.perceivedEffort ?: 0) >= 8
+        }
+        return strained >= 2
     }
 
     private fun gearTip(records: List<ActivityRecord>, gear: List<Gear>, imperial: Boolean, seed: Int): Pair<TipTone, String>? {
