@@ -87,6 +87,7 @@ fun SettingsScreen(onBack: () -> Unit, onOpenOfflineMaps: () -> Unit, onOpenSens
     val mediaSizes by produceState(0L to 0L) {
         value = withContext(Dispatchers.IO) { ActivityMedia.sizes() }
     }
+    val weatherTag by Prefs.weatherTag.collectAsStateWithLifecycle()
     val importStatus by DataTransfer.importStatus.collectAsStateWithLifecycle()
     val activities by ActivityStore.activities.collectAsStateWithLifecycle()
 
@@ -204,6 +205,12 @@ fun SettingsScreen(onBack: () -> Unit, onOpenOfflineMaps: () -> Unit, onOpenSens
                     ToggleRow("3-2-1 countdown", "A short countdown before recording starts.", countdown) {
                         Prefs.setCountdown(it)
                     }
+                    HorizontalHairline()
+                    ToggleRow(
+                        "Weather on activities",
+                        "Adds the conditions at the start, from Open-Meteo. Only the start hour and your area rounded to about 10 km are sent.",
+                        weatherTag,
+                    ) { Prefs.setWeatherTag(it) }
                     HorizontalHairline()
                     LinkRow(
                         title = "Background recording",

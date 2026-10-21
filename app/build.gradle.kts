@@ -74,4 +74,6 @@ dependencies {
     implementation("org.maplibre.gl:android-sdk:11.8.0")
 
     testImplementation("junit:junit:4.13.2")
+    // Android's own org.json is only a stub in unit tests.
+    testImplementation("org.json:json:20240303")
 }

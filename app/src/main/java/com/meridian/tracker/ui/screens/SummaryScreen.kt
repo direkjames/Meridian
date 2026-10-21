@@ -27,6 +27,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,6 +46,9 @@ import com.meridian.tracker.data.Indoor
 import com.meridian.tracker.data.Badges
 import com.meridian.tracker.data.Calories
 import com.meridian.tracker.data.Prefs
+import com.meridian.tracker.data.ActivityEdits
+import com.meridian.tracker.data.WeatherLookup
+import com.meridian.tracker.data.WeatherTag
 import com.meridian.tracker.data.EarnedBadge
 import com.meridian.tracker.data.Effort
 import com.meridian.tracker.data.ExtrasStore
@@ -121,6 +125,14 @@ fun SummaryScreen(
     val saved by ActivityStore.activities.collectAsStateWithLifecycle()
     val body by Prefs.body.collectAsStateWithLifecycle()
     val calories = remember(record, body) { Calories.estimate(record, body) }
+    val weatherOn by Prefs.weatherTag.collectAsStateWithLifecycle()
+    val imperial by Prefs.imperial.collectAsStateWithLifecycle()
+    // Tag the weather at the start of the activity, once, when online. A failure just means no tag.
+    LaunchedEffect(record.id, weatherOn) {
+        if (weatherOn && WeatherTag.eligible(record, System.currentTimeMillis())) {
+            WeatherLookup.lookup(record)?.let { ActivityEdits.setWeather(record.id, it) }
+        }
+    }
     val newBests by produceState(initialValue = emptyList<BestResult>(), record.id, saved.size) {
         value = withContext(Dispatchers.Default) { Stats.newBestsFor(record, saved) }
     }
@@ -188,7 +200,8 @@ fun SummaryScreen(
 
             Column(Modifier.padding(horizontal = 24.dp)) {
                 Text(
-                    "${record.sport.label.uppercase()} · ${dateLabel(record.startTimeMs).uppercase()}",
+                    "${record.sport.label.uppercase()} · ${dateLabel(record.startTimeMs).uppercase()}" +
+                        (record.weather?.let { " · ${WeatherTag.describe(it, imperial).uppercase()}" } ?: ""),
                     style = MType.Label,
                 )
                 Spacer(Modifier.height(8.dp))
