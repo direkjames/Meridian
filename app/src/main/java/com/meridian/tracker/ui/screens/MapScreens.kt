@@ -38,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
@@ -61,7 +62,9 @@ import com.meridian.tracker.ui.components.MIcons
 import com.meridian.tracker.ui.components.PillButton
 import com.meridian.tracker.ui.components.SectionCard
 import com.meridian.tracker.ui.components.SportFilterRow
+import com.meridian.tracker.ui.components.addEndpointLayers
 import com.meridian.tracker.ui.components.rememberMapView
+import com.meridian.tracker.ui.components.setEndpoints
 import com.meridian.tracker.ui.shortDateLabel
 import com.meridian.tracker.ui.theme.MColors
 import com.meridian.tracker.ui.theme.MType
@@ -285,6 +288,7 @@ fun RouteBuilderScreen(onBack: () -> Unit, onFollow: () -> Unit) {
                         PropertyFactory.circleStrokeWidth(2.5f),
                     )
                 )
+                s.addEndpointLayers()
                 fix?.let { m.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(it.lat, it.lon), 15.0)) }
                 m.addOnMapClickListener { ll ->
                     points.add(ll.latitude to ll.longitude)
@@ -311,6 +315,7 @@ fun RouteBuilderScreen(onBack: () -> Unit, onFollow: () -> Unit) {
                 s.getSourceAs<GeoJsonSource>("draft-pts")?.setGeoJson(
                     FeatureCollection.fromFeatures(points.map { Feature.fromGeometry(Point.fromLngLat(it.second, it.first)) })
                 )
+                s.setEndpoints(points.toList())
             }
             Row(
                 Modifier
@@ -350,6 +355,18 @@ fun RouteBuilderScreen(onBack: () -> Unit, onFollow: () -> Unit) {
                 Text("${points.size} POINTS", style = MType.Label)
             }
             Text("Straight lines between taps. Add more points along curves for accuracy.", style = MType.Body.copy(fontSize = MType.Body.fontSize * 0.85f))
+            if (points.size >= 2) {
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(10.dp).clip(CircleShape).background(Color(0xFF34D399)))
+                    Spacer(Modifier.width(6.dp))
+                    Text("START", style = MType.Label)
+                    Spacer(Modifier.width(16.dp))
+                    Box(Modifier.size(10.dp).clip(CircleShape).background(Color(0xFFF87171)))
+                    Spacer(Modifier.width(6.dp))
+                    Text("FINISH", style = MType.Label)
+                }
+            }
             Spacer(Modifier.height(12.dp))
             Box(
                 Modifier
