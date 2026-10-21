@@ -33,6 +33,8 @@ object ActivityStore {
     private const val TAG = "ActivityStore"
     private lateinit var dir: File
     private lateinit var inProgressFile: File
+    /** Untouched copies of activities that were trimmed, so a trim can be undone. */
+    private lateinit var originalDir: File
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     /** One thread for snapshot writes and deletes, so they always happen in order. */
     private val snapshotScope = CoroutineScope(
@@ -51,6 +53,7 @@ object ActivityStore {
     fun init(context: Context) {
         dir = File(context.filesDir, "activities").apply { mkdirs() }
         inProgressFile = File(context.filesDir, "in_progress.json")
+        originalDir = File(context.filesDir, "activities_original").apply { mkdirs() }
         scope.launch {
             _activities.value = loadAll()
             loaded.complete(Unit)
@@ -170,10 +173,59 @@ object ActivityStore {
         }
     }
 
+    // ---- Editing a saved activity ----------------------------------------------------------------
+
+    fun hasOriginal(id: String): Boolean = ::originalDir.isInitialized && File(originalDir, "$id.json").exists()
+
+    /**
+     * Trims a saved activity to [fromMs]..[toMs]. The first time, the untouched file is kept so
+     * [restoreOriginal] can bring it back. Returns the trimmed activity, or null when nothing
+     * would be left or the activity is gone.
+     */
+    suspend fun trim(id: String, fromMs: Long, toMs: Long): ActivityRecord? {
+        val result = writeLock.withLock {
+            withContext(Dispatchers.IO) {
+                val current = _activities.value.firstOrNull { it.id == id } ?: return@withContext null
+                val trimmed = ActivityEditing.trim(current, fromMs, toMs) ?: return@withContext null
+                val src = File(dir, "$id.json")
+                val copy = File(originalDir, "$id.json")
+                if (!copy.exists() && src.exists()) src.copyTo(copy)
+                writeLocked(listOf(trimmed))
+                trimmed
+            }
+        }
+        if (result != null) onChanged?.invoke()
+        return result
+    }
+
+    /** Undoes every trim of this activity. Returns the restored activity, or null if there is nothing to restore. */
+    suspend fun restoreOriginal(id: String): ActivityRecord? {
+        val result = writeLock.withLock {
+            withContext(Dispatchers.IO) {
+                val current = _activities.value.firstOrNull { it.id == id } ?: return@withContext null
+                val copy = File(originalDir, "$id.json")
+                if (!copy.exists()) return@withContext null
+                val original = try {
+                    fromJson(JSONObject(copy.readText()))
+                } catch (e: Exception) {
+                    Log.w(TAG, "Couldn't read the original of $id", e)
+                    return@withContext null
+                }
+                val restored = ActivityEditing.restoreTrim(current, original)
+                writeLocked(listOf(restored))
+                copy.delete()
+                restored
+            }
+        }
+        if (result != null) onChanged?.invoke()
+        return result
+    }
+
     suspend fun delete(id: String) {
         writeLock.withLock {
             withContext(Dispatchers.IO) {
                 File(dir, "$id.json").delete()
+                if (::originalDir.isInitialized) File(originalDir, "$id.json").delete()
                 _activities.update { list -> list.filterNot { it.id == id } }
                 ActivityMedia.deleteAll(id)
             }
