@@ -219,7 +219,7 @@ object Stats {
                 1000.0 to "Fastest 1K",
                 5000.0 to "Fastest 5K",
             )
-            Sport.HIKE -> emptyList()
+            Sport.HIKE, Sport.TREADMILL -> emptyList()
         }.map { (m, title) -> BestSpec("effort-${m.toLong()}", title, BestKind.EFFORT, m) }
         return efforts + listOf(
             BestSpec("distance", "Longest ${sport.label.lowercase()}", BestKind.DISTANCE),

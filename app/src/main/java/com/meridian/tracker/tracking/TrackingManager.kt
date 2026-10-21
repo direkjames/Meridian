@@ -8,6 +8,7 @@ import com.meridian.tracker.data.ActivityRecord
 import com.meridian.tracker.data.ActivityMedia
 import com.meridian.tracker.data.ActivityStore
 import com.meridian.tracker.data.HeartRate
+import com.meridian.tracker.data.Indoor
 import com.meridian.tracker.data.PlannedRoute
 import com.meridian.tracker.data.Sample
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -112,6 +113,9 @@ object TrackingManager {
     private var lastHrRealtime = 0L
     private var lastCadenceSampleRealtime = 0L
 
+    /** Step length used to turn steps into distance on indoor sports (no GPS). */
+    private var indoorStrideM = Indoor.DEFAULT_STRIDE_M
+
     // ---- Commands from the UI -------------------------------------------------------------
 
     @Synchronized
@@ -138,6 +142,7 @@ object TrackingManager {
         cadenceSamples.clear()
         stepCounter = null
         lastCadenceSampleRealtime = startedAtRealtime
+        indoorStrideM = if (current.sport.usesGps) Indoor.DEFAULT_STRIDE_M else Indoor.stride(ActivityStore.activities.value)
         _state.value = TrackingState(
             status = RecordStatus.RECORDING,
             sport = current.sport,
@@ -190,7 +195,7 @@ object TrackingManager {
     @Synchronized
     fun snapshot(): ActivityRecord? {
         val s = _state.value
-        if (s.status == RecordStatus.IDLE || processor.points.isEmpty()) return null
+        if (s.status == RecordStatus.IDLE || (s.sport.usesGps && processor.points.isEmpty())) return null
         return buildRecord(s, SystemClock.elapsedRealtime())
     }
 
@@ -228,7 +233,11 @@ object TrackingManager {
     }
 
     private fun buildRecord(s: TrackingState, now: Long): ActivityRecord {
-        val (partialM, partialMs) = processor.partialSplit()
+        val indoor = !s.sport.usesGps
+        val elapsed = s.elapsedMs(now)
+        val distance = if (indoor) s.distanceM else processor.distanceM
+        val moving = if (indoor) elapsed else processor.movingMs
+        val (partialM, partialMs) = if (indoor) Indoor.splits(distance, moving).let { it.second to it.third } else processor.partialSplit()
         // Convert monotonic point times to wall-clock times for storage and export.
         val wallPoints = processor.points.map { p ->
             p.copy(time = s.startedAtWallMs + (p.time - startedAtRealtime))
@@ -238,11 +247,11 @@ object TrackingManager {
             title = defaultTitle(s.sport, s.startedAtWallMs),
             sport = s.sport,
             startTimeMs = s.startedAtWallMs,
-            distanceM = processor.distanceM,
-            movingMs = processor.movingMs,
-            elapsedMs = s.elapsedMs(now),
+            distanceM = distance,
+            movingMs = moving,
+            elapsedMs = elapsed,
             elevationGainM = s.elevationGainM,
-            splitsMs = processor.splitsMs.toList(),
+            splitsMs = if (indoor) Indoor.splits(distance, moving).first else processor.splitsMs.toList(),
             partialSplitM = partialM,
             partialSplitMs = partialMs,
             points = wallPoints,
@@ -265,7 +274,7 @@ object TrackingManager {
     fun onLocation(lat: Double, lon: Double, accuracy: Float, altitude: Double?, monotonicMs: Long) {
         val fix = Fix(lat, lon, accuracy, SystemClock.elapsedRealtime())
         val s = _state.value
-        if (s.status != RecordStatus.RECORDING) {
+        if (s.status != RecordStatus.RECORDING || !s.sport.usesGps) {
             if (altitude != null) gpsElevation.onAltitude(altitude, counting = false)
             _state.value = s.copy(lastFix = fix)
             return
@@ -336,7 +345,7 @@ object TrackingManager {
         val counter = stepCounter ?: return
         val s = _state.value
         counter.onCounter(total, monoMs, counting = s.status == RecordStatus.RECORDING)
-        if (s.steps != counter.steps) _state.value = s.copy(steps = counter.steps)
+        if (s.steps != counter.steps) _state.value = withSteps(s, counter.steps)
     }
 
     @Synchronized
@@ -344,8 +353,13 @@ object TrackingManager {
         val counter = stepCounter ?: return
         val s = _state.value
         counter.onStep(monoMs, counting = s.status == RecordStatus.RECORDING)
-        if (s.steps != counter.steps) _state.value = s.copy(steps = counter.steps)
+        if (s.steps != counter.steps) _state.value = withSteps(s, counter.steps)
     }
+
+    /** New step count; on indoor sports the distance follows from it. */
+    private fun withSteps(s: TrackingState, steps: Int): TrackingState =
+        if (s.sport.usesGps) s.copy(steps = steps)
+        else s.copy(steps = steps, distanceM = Indoor.distanceFromSteps(steps, indoorStrideM))
 
     /** Called every few seconds by the service: live cadence, cadence history, stale heart rate. */
     @Synchronized
@@ -358,6 +372,13 @@ object TrackingManager {
         if (cadence != null && s.status == RecordStatus.RECORDING && now - lastCadenceSampleRealtime >= CADENCE_EVERY_MS) {
             cadenceSamples.add(Sample(System.currentTimeMillis(), cadence))
             lastCadenceSampleRealtime = now
+        }
+        if (!s.sport.usesGps) {
+            // No GPS: time on the machine counts as moving time, and pace follows from cadence × stride.
+            val moving = if (s.status == RecordStatus.RECORDING) s.elapsedMs(now) else s.movingMs
+            val speed = cadence?.let { it * indoorStrideM / 60.0 } ?: 0.0
+            _state.value = s.copy(heartRate = hr, cadence = cadence, movingMs = moving, currentSpeed = speed)
+            return
         }
         if (hr != s.heartRate || cadence != s.cadence) _state.value = s.copy(heartRate = hr, cadence = cadence)
     }

@@ -78,7 +78,7 @@ object Calories {
     fun met(sport: Sport, speedMps: Double): Double {
         val kmh = (speedMps * 3.6).coerceAtLeast(0.0)
         return when (sport) {
-            Sport.RUN -> max(5.5, min(kmh, 20.0))
+            Sport.RUN, Sport.TREADMILL -> max(5.5, min(kmh, 20.0))
             Sport.TRAIL_RUN -> max(6.0, min(kmh * 1.05, 20.0))
             Sport.WALK -> lerp(WALK_TABLE, kmh)
             Sport.HIKE -> lerp(HIKE_TABLE, kmh)

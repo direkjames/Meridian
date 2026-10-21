@@ -113,6 +113,7 @@ object RecordBuilder {
             t == "1" -> Sport.RIDE
             t == "10" -> Sport.WALK
             t == "4" -> Sport.HIKE
+            "treadmill" in t || "indoor run" in t -> Sport.TREADMILL
             "trail" in t -> Sport.TRAIL_RUN
             "run" in t || "jog" in t -> Sport.RUN
             "ride" in t || "bik" in t || "cycl" in t || "bicycl" in t -> Sport.RIDE

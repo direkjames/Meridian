@@ -95,7 +95,8 @@ class TrackingService : Service() {
     /** Listens to the phone's step sensor for runs and walks, when allowed. */
     private fun startSteps() {
         val sport = TrackingManager.state.value.sport
-        if (sport == Sport.RIDE || !Prefs.countSteps.value || !StepPermission.granted(this)) return
+        // Indoors the steps are the only way to measure distance, so the switch in Settings is ignored.
+        if (sport == Sport.RIDE || (sport.usesGps && !Prefs.countSteps.value) || !StepPermission.granted(this)) return
         val sm = sensorManager ?: return
         val sensor = sm.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
             ?: sm.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR)
@@ -157,15 +158,18 @@ class TrackingService : Service() {
         tracking = true
 
         // Settings › GPS: every second, or every 3 seconds to save battery on long activities.
-        val interval = if (Prefs.highAccuracy.value) 1_000L else 3_000L
-        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, interval)
-            .setMinUpdateIntervalMillis(interval)
-            .setWaitForAccurateLocation(false)
-            .build()
-        fused.requestLocationUpdates(request, locationCallback, Looper.getMainLooper())
+        // Indoor sports have no route, so no location or barometer.
+        if (TrackingManager.state.value.sport.usesGps) {
+            val interval = if (Prefs.highAccuracy.value) 1_000L else 3_000L
+            val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, interval)
+                .setMinUpdateIntervalMillis(interval)
+                .setWaitForAccurateLocation(false)
+                .build()
+            fused.requestLocationUpdates(request, locationCallback, Looper.getMainLooper())
 
-        sensorManager?.getDefaultSensor(Sensor.TYPE_PRESSURE)?.let { sensor ->
-            sensorManager?.registerListener(pressureListener, sensor, SensorManager.SENSOR_DELAY_NORMAL)
+            sensorManager?.getDefaultSensor(Sensor.TYPE_PRESSURE)?.let { sensor ->
+                sensorManager?.registerListener(pressureListener, sensor, SensorManager.SENSOR_DELAY_NORMAL)
+            }
         }
         startSteps()
         HeartRateMonitor.acquire(this, HR_TAG)
