@@ -168,6 +168,17 @@ object ActivityMedia {
         }
     }
 
+    /** Disk used by photos and by videos, in bytes (photos first). */
+    fun sizes(): Pair<Long, Long> {
+        if (!::root.isInitialized) return 0L to 0L
+        var photos = 0L
+        var videos = 0L
+        root.walkTopDown().filter { it.isFile && !it.name.endsWith(".tmp") }.forEach {
+            if (it.extension.equals("jpg", ignoreCase = true)) photos += it.length() else videos += it.length()
+        }
+        return photos to videos
+    }
+
     /** Backup folder name for an activity's media (same sanitising as on disk). */
     fun backupFolder(activityId: String): String = folderName(activityId)
 
