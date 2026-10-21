@@ -118,10 +118,6 @@ fun RecordScreen(onOpenSettings: () -> Unit, onOpenRouteBuilder: () -> Unit, onO
     val live by TrackingManager.live.collectAsStateWithLifecycle()
     val savedRoutes by ExtrasStore.routes.collectAsStateWithLifecycle()
     var pickingRoute by remember { mutableStateOf(false) }
-    val feel = LocalHapticFeedback.current
-    LaunchedEffect(live.offRoute) {
-        if (live.offRoute) feel.performHapticFeedback(HapticFeedbackType.LongPress)
-    }
     val activities by ActivityStore.activities.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -775,7 +771,6 @@ private fun GuideChip(label: String, active: Boolean, onClick: () -> Unit, onCle
 
 @Composable
 private fun LiveGuide(state: TrackingState, guide: Guide, live: GuideLive) {
-    val feel = LocalHapticFeedback.current
     val target = guide.target
     val fraction = target?.let { t ->
         when {
@@ -785,7 +780,6 @@ private fun LiveGuide(state: TrackingState, guide: Guide, live: GuideLive) {
         }
     }
     val reached = fraction != null && fraction >= 1.0
-    LaunchedEffect(reached) { if (reached) feel.performHapticFeedback(HapticFeedbackType.LongPress) }
 
     if (target == null && guide.route == null && guide.ghost == null) return
     Spacer(Modifier.height(14.dp))

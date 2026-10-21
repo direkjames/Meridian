@@ -168,6 +168,29 @@ object ActivityMedia {
         }
     }
 
+    /** Backup folder name for an activity's media (same sanitising as on disk). */
+    fun backupFolder(activityId: String): String = folderName(activityId)
+
+    /**
+     * Writes a media file restored from a backup into the activity's folder. Only safe file names
+     * are accepted, existing files are kept, and a half-copied file is never left behind.
+     */
+    fun restoreFile(activityId: String, name: String, input: java.io.InputStream): Boolean {
+        if (!::root.isInitialized || !isSafeFileName(name)) return false
+        val dir = folder(activityId).apply { mkdirs() }
+        val out = File(dir, name)
+        if (out.exists()) return true
+        val tmp = File(dir, "$name.tmp")
+        return try {
+            tmp.outputStream().use { input.copyTo(it) }
+            if (tmp.renameTo(out)) true else { tmp.delete(); false }
+        } catch (e: Exception) {
+            Log.w(TAG, "Couldn't restore media $name", e)
+            tmp.delete()
+            false
+        }
+    }
+
     fun deleteAll(activityId: String) {
         if (!::root.isInitialized) return
         val dir = folder(activityId)

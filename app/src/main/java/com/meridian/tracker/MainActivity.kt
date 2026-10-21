@@ -207,8 +207,17 @@ private fun MeridianRoot() {
                                     scope.launch {
                                         // The latest draft, with every photo and gear pick made on this screen.
                                         val latest = TrackingManager.draft.value?.takeIf { it.id == record.id } ?: record
-                                        ActivityStore.save(latest.copy(title = title))
-                                        TrackingManager.clearDraft()
+                                        // If the phone can't write (storage full), keep the draft instead of crashing.
+                                        val ok = runCatching { ActivityStore.save(latest.copy(title = title)) }.isSuccess
+                                        if (ok) {
+                                            TrackingManager.clearDraft()
+                                        } else {
+                                            android.widget.Toast.makeText(
+                                                context,
+                                                "Couldn't save. Free up some storage and try again.",
+                                                android.widget.Toast.LENGTH_LONG,
+                                            ).show()
+                                        }
                                     }
                                 },
                                 onDiscard = { TrackingManager.discardDraft() },
