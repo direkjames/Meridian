@@ -181,7 +181,7 @@ fun RecordScreen(onOpenSettings: () -> Unit, onOpenRouteBuilder: () -> Unit, onO
         val perm = StepPermission.permission
         val wantSteps = state.sport != Sport.RIDE && countSteps && !askedSteps && perm != null &&
             !StepPermission.granted(context) && StepPermission.hasSensor(context)
-        if (wantSteps && perm != null) {
+        if (wantSteps) {
             Prefs.setAskedSteps()
             stepAsk.launch(perm)
         } else {
@@ -789,7 +789,7 @@ private fun LiveGuide(state: TrackingState, guide: Guide, live: GuideLive) {
 
     if (target == null && guide.route == null && guide.ghost == null) return
     Spacer(Modifier.height(14.dp))
-    if (fraction != null && target != null) {
+    if (fraction != null) {
         Row(Modifier.fillMaxWidth()) {
             Text(
                 if (reached) "TARGET REACHED · ${target.title.uppercase()}" else "TARGET · ${target.title.uppercase()}",
