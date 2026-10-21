@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -155,10 +156,12 @@ fun GpsPill(quality: GpsQuality, accuracyM: Float?, modifier: Modifier = Modifie
 
 @Composable
 fun SportSelector(selected: Sport, onSelect: (Sport) -> Unit, modifier: Modifier = Modifier) {
+    // Six sports can be wider than the screen, so the pill scrolls instead of squeezing the names.
     Row(
         modifier
             .clip(CircleShape)
             .background(MColors.Surface2)
+            .horizontalScroll(rememberScrollState())
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -168,11 +171,12 @@ fun SportSelector(selected: Sport, onSelect: (Sport) -> Unit, modifier: Modifier
             val fg by animateColorAsState(if (isSelected) MColors.OnAccent else MColors.Muted, label = "sportFg")
             Box(
                 Modifier
-                    .weight(1f)
+                    .widthIn(min = 64.dp)
                     .height(44.dp)
                     .clip(CircleShape)
                     .background(bg)
-                    .clickable(role = Role.Tab) { onSelect(sport) },
+                    .clickable(role = Role.Tab) { onSelect(sport) }
+                    .padding(horizontal = 16.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(sport.short, style = MType.Button.copy(color = fg), maxLines = 1)

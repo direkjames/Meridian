@@ -175,7 +175,7 @@ fun RecordScreen(onOpenSettings: () -> Unit, onOpenRouteBuilder: () -> Unit, onO
     val stepAsk = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { beginStart() }
     fun onStartPressed() {
         val perm = StepPermission.permission
-        val wantSteps = state.sport != Sport.RIDE && countSteps && !askedSteps && perm != null &&
+        val wantSteps = state.sport != Sport.RIDE && (countSteps || !state.sport.usesGps) && !askedSteps && perm != null &&
             !StepPermission.granted(context) && StepPermission.hasSensor(context)
         if (wantSteps) {
             Prefs.setAskedSteps()
@@ -192,7 +192,7 @@ fun RecordScreen(onOpenSettings: () -> Unit, onOpenRouteBuilder: () -> Unit, onO
         if (state.status != RecordStatus.RECORDING) locked = false
     }
 
-    GpsWarmup(enabled = state.status == RecordStatus.IDLE)
+    GpsWarmup(enabled = state.status == RecordStatus.IDLE && state.sport.usesGps)
 
     val quality = state.gpsQuality(now)
 
@@ -201,7 +201,9 @@ fun RecordScreen(onOpenSettings: () -> Unit, onOpenRouteBuilder: () -> Unit, onO
             .fillMaxSize()
             .background(MColors.Bg)
     ) {
-        RouteMap(
+        if (!state.sport.usesGps) {
+            IndoorBackdrop(Modifier.fillMaxSize())
+        } else RouteMap(
             points = state.points,
             fix = state.lastFix,
             mode = MapMode.FOLLOW,
@@ -239,12 +241,12 @@ fun RecordScreen(onOpenSettings: () -> Unit, onOpenRouteBuilder: () -> Unit, onO
                 CircleIconButton(MIcons.Settings, "Settings", onClick = onOpenSettings, size = 40.dp)
                 Spacer(Modifier.width(8.dp))
             }
-            GpsPill(quality, state.lastFix?.accuracy)
+            if (state.sport.usesGps) GpsPill(quality, state.lastFix?.accuracy)
         }
 
         // Recenter
         AnimatedVisibility(
-            visible = !follow,
+            visible = !follow && state.sport.usesGps,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier
@@ -324,6 +326,21 @@ fun RecordScreen(onOpenSettings: () -> Unit, onOpenRouteBuilder: () -> Unit, onO
     }
 }
 
+/** Stand-in for the map on indoor sports, which have no route. */
+@Composable
+private fun IndoorBackdrop(modifier: Modifier = Modifier) {
+    Box(
+        modifier.background(Brush.verticalGradient(listOf(MColors.Bg, MColors.Surface))),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(bottom = 160.dp)) {
+            Text("INDOOR", style = MType.Hero.copy(color = MColors.Hairline))
+            Spacer(Modifier.height(6.dp))
+            Text("NO ROUTE · NO GPS", style = MType.Label.copy(color = MColors.Faint))
+        }
+    }
+}
+
 // ---- Panel handle ------------------------------------------------------------------------------
 
 /** The grabber: tap it, or drag it down / up, to make the panel smaller or bigger. */
@@ -393,7 +410,10 @@ private fun IdlePanel(
     onPickRoute: () -> Unit,
     onStart: () -> Unit,
 ) {
-    val ready = quality == GpsQuality.GOOD || quality == GpsQuality.STRONG
+    val indoor = !state.sport.usesGps
+    val ready = indoor || quality == GpsQuality.GOOD || quality == GpsQuality.STRONG
+    val context = LocalContext.current
+    val stepsReady = StepPermission.granted(context) || !StepPermission.hasSensor(context)
     Column(Modifier.fillMaxWidth()) {
         SportSelector(state.sport, onSelect = TrackingManager::setSport, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(10.dp))
@@ -401,7 +421,7 @@ private fun IdlePanel(
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(
-                    when (quality) {
+                    if (indoor) "INDOOR · NO GPS" else when (quality) {
                         GpsQuality.SEARCHING -> "FINDING GPS"
                         GpsQuality.WEAK -> "WEAK GPS"
                         else -> "GPS LOCKED"
@@ -410,7 +430,10 @@ private fun IdlePanel(
                 )
                 Spacer(Modifier.height(3.dp))
                 Text(
-                    when (quality) {
+                    if (indoor) {
+                        if (stepsReady) "Distance comes from your steps. You can set it to the treadmill's number afterwards."
+                        else "Allow Physical activity when asked so steps can measure distance, or enter it afterwards."
+                    } else when (quality) {
                         GpsQuality.SEARCHING -> "Step outside for a faster lock."
                         GpsQuality.WEAK -> "Recording tidies up once it improves."
                         else -> "You're ready to go."

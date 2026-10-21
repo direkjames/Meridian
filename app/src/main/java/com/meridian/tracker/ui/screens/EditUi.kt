@@ -11,6 +11,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.input.KeyboardType
+import com.meridian.tracker.data.Indoor
+import java.util.Locale
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -37,7 +44,7 @@ import com.meridian.tracker.data.ActivityStore
 import com.meridian.tracker.tracking.Sport
 import com.meridian.tracker.ui.Format
 import com.meridian.tracker.ui.components.RouteCanvas
-import com.meridian.tracker.ui.components.Segmented
+import com.meridian.tracker.ui.components.SportSelector
 import com.meridian.tracker.ui.theme.MColors
 import com.meridian.tracker.ui.theme.MType
 import kotlinx.coroutines.Dispatchers
@@ -52,6 +59,7 @@ fun EditActivityDialog(record: ActivityRecord, onDismiss: () -> Unit) {
     var trimming by remember { mutableStateOf(false) }
     var hasOriginal by remember { mutableStateOf(ActivityStore.hasOriginal(record.id)) }
     var confirmRestore by remember { mutableStateOf(false) }
+    var settingDistance by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     if (trimming) {
@@ -70,10 +78,9 @@ fun EditActivityDialog(record: ActivityRecord, onDismiss: () -> Unit) {
             Column {
                 Text("SPORT", style = MType.Label)
                 Spacer(Modifier.height(8.dp))
-                Segmented(
-                    options = Sport.entries.map { it.short },
-                    selected = Sport.entries.indexOf(record.sport).coerceAtLeast(0),
-                    onSelect = { i -> scope.launch { ActivityEdits.setSport(record.id, Sport.entries[i]) } },
+                SportSelector(
+                    selected = record.sport,
+                    onSelect = { sport -> scope.launch { ActivityEdits.setSport(record.id, sport) } },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(6.dp))
@@ -81,6 +88,13 @@ fun EditActivityDialog(record: ActivityRecord, onDismiss: () -> Unit) {
                     "Distance and time stay as recorded.",
                     style = MType.Body.copy(fontSize = MType.Body.fontSize * 0.88f, color = MColors.Faint),
                 )
+                if (Indoor.canSetDistance(record)) {
+                    Spacer(Modifier.height(18.dp))
+                    ActionRow(
+                        "Distance: ${Format.km(record.distanceM)} ${Format.distUnit}",
+                        "Set it to what the treadmill showed.",
+                    ) { settingDistance = true }
+                }
                 if (record.points.size >= TRIM_MIN_POINTS) {
                     Spacer(Modifier.height(18.dp))
                     ActionRow(
@@ -100,6 +114,8 @@ fun EditActivityDialog(record: ActivityRecord, onDismiss: () -> Unit) {
             TextButton(onClick = onDismiss) { Text("Done", style = MType.Button.copy(color = MColors.Accent)) }
         },
     )
+
+    if (settingDistance) DistanceDialog(record, onDismiss = { settingDistance = false })
 
     if (confirmRestore) {
         AlertDialog(
@@ -248,6 +264,73 @@ private fun TrimDialog(record: ActivityRecord, onDone: (trimmed: Boolean) -> Uni
             TextButton(enabled = !busy, onClick = { onDone(false) }) {
                 Text("Cancel", style = MType.Button.copy(color = MColors.Text))
             }
+        },
+    )
+}
+
+/**
+ * Types in the distance a treadmill (or other indoor session) showed. Works on the unsaved
+ * activity and on saved ones; says so when the number can't be right for the time spent.
+ */
+@Composable
+fun DistanceDialog(record: ActivityRecord, onDismiss: () -> Unit) {
+    var text by rememberSaveable {
+        mutableStateOf(if (record.distanceM > 0) String.format(Locale.US, "%.2f", record.distanceM / Format.unitMeters) else "")
+    }
+    var error by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = MColors.Surface2,
+        title = { Text("Distance (${Format.distUnit})", style = MType.Heading) },
+        text = {
+            Column {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(MColors.Bg)
+                        .border(1.dp, MColors.Stroke, RoundedCornerShape(14.dp))
+                        .padding(horizontal = 16.dp, vertical = 14.dp)
+                ) {
+                    BasicTextField(
+                        value = text,
+                        onValueChange = { v ->
+                            if (v.length <= 7 && v.all { it.isDigit() || it == '.' || it == ',' }) { text = v; error = null }
+                        },
+                        textStyle = MType.Heading,
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        cursorBrush = SolidColor(MColors.Accent),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    error ?: "Pace, splits and calories follow from this.",
+                    style = MType.Body.copy(
+                        fontSize = MType.Body.fontSize * 0.88f,
+                        color = if (error != null) MColors.Danger else MColors.Faint,
+                    ),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val meters = text.replace(',', '.').toDoubleOrNull()?.times(Format.unitMeters)
+                val updated = meters?.let { Indoor.withDistance(record, it) }
+                if (updated == null) {
+                    error = "That doesn't fit the time you spent. Check the number."
+                } else {
+                    scope.launch {
+                        ActivityEdits.edit(record.id) { r -> Indoor.withDistance(r, meters) ?: r }
+                        onDismiss()
+                    }
+                }
+            }) { Text("Save", style = MType.Button.copy(color = MColors.Accent)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel", style = MType.Button.copy(color = MColors.Text)) }
         },
     )
 }

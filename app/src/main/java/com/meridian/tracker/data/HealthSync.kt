@@ -297,8 +297,8 @@ object HealthSync {
     }
 
     private fun sportOf(type: Int): Sport? = when (type) {
-        ExerciseSessionRecord.EXERCISE_TYPE_RUNNING,
-        ExerciseSessionRecord.EXERCISE_TYPE_RUNNING_TREADMILL -> Sport.RUN
+        ExerciseSessionRecord.EXERCISE_TYPE_RUNNING -> Sport.RUN
+        ExerciseSessionRecord.EXERCISE_TYPE_RUNNING_TREADMILL -> Sport.TREADMILL
         ExerciseSessionRecord.EXERCISE_TYPE_WALKING -> Sport.WALK
         ExerciseSessionRecord.EXERCISE_TYPE_HIKING -> Sport.HIKE
         ExerciseSessionRecord.EXERCISE_TYPE_BIKING,

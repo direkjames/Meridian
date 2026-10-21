@@ -1,5 +1,7 @@
 package com.meridian.tracker.ui.screens
 
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.clickable
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -39,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import com.meridian.tracker.data.ActivityAnalysis
 import com.meridian.tracker.data.ActivityRecord
 import com.meridian.tracker.data.ActivityStore
+import com.meridian.tracker.data.Indoor
 import com.meridian.tracker.data.Badges
 import com.meridian.tracker.data.Calories
 import com.meridian.tracker.data.Prefs
@@ -102,6 +105,7 @@ fun SummaryScreen(
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
     var renaming by rememberSaveable { mutableStateOf(false) }
     var editing by rememberSaveable { mutableStateOf(false) }
+    var settingDistance by rememberSaveable { mutableStateOf(false) }
     var gpxNote by remember { mutableStateOf<String?>(null) }
     var mediaBusy by remember { mutableStateOf(false) }
     val detailsFlush = remember(record.id) { DetailsFlush() }
@@ -214,6 +218,10 @@ fun SummaryScreen(
                     Text(Format.distUnit, style = MType.Unit.copy(fontSize = MType.Unit.fontSize * 1.3f), modifier = Modifier.padding(bottom = 12.dp))
                 }
                 Spacer(Modifier.height(20.dp))
+                if (Indoor.canSetDistance(record)) {
+                    IndoorDistanceCard(onClick = { settingDistance = true })
+                    Spacer(Modifier.height(12.dp))
+                }
                 record.steps?.let { steps ->
                     StepsBanner(steps, record.avgCadence, record.strideM)
                     Spacer(Modifier.height(12.dp))
@@ -360,13 +368,15 @@ fun SummaryScreen(
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Spacer(Modifier.height(10.dp))
-                    PillButton(
-                        "Export GPX file",
-                        icon = MIcons.Download,
-                        filled = false,
-                        onClick = { gpxPicker.launch(TrackFormats.fileName(record)) },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                    if (record.points.isNotEmpty()) {
+                        PillButton(
+                            "Export GPX file",
+                            icon = MIcons.Download,
+                            filled = false,
+                            onClick = { gpxPicker.launch(TrackFormats.fileName(record)) },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                     Spacer(Modifier.height(12.dp))
                     Text(
                         gpxNote ?: "Saved on this phone only.",
@@ -425,6 +435,7 @@ fun SummaryScreen(
             onDismiss = { renaming = false },
         )
     }
+    if (settingDistance) DistanceDialog(record, onDismiss = { settingDistance = false })
     if (editing && !isNew) {
         EditActivityDialog(record = record, onDismiss = { editing = false })
     }
@@ -511,6 +522,30 @@ private fun SourceLabel(source: String) {
 }
 
 /** Steps for this activity, shown right under the distance. */
+/** Indoor sessions have no route, so the distance is a step-based estimate until it's typed in. */
+@Composable
+private fun IndoorDistanceCard(onClick: () -> Unit) {
+    val shape = RoundedCornerShape(22.dp)
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(MColors.Surface)
+            .border(1.dp, MColors.Hairline, shape)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+    ) {
+        Text("INDOOR · NO ROUTE", style = MType.Label)
+        Spacer(Modifier.height(4.dp))
+        Text("Set the distance from the treadmill", style = MType.Heading.copy(color = MColors.Accent))
+        Spacer(Modifier.height(2.dp))
+        Text(
+            "The number above is estimated from your steps. Tap to enter the machine's, and pace and calories will follow.",
+            style = MType.Body.copy(fontSize = MType.Body.fontSize * 0.9f),
+        )
+    }
+}
+
 @Composable
 private fun StepsBanner(steps: Int, cadence: Int?, strideM: Double?) {
     val shape = RoundedCornerShape(22.dp)
