@@ -168,6 +168,15 @@ fun SettingsScreen(onBack: () -> Unit, onOpenOfflineMaps: () -> Unit, onOpenSens
                 modifier = Modifier.fillMaxWidth(),
             )
 
+            // ---- Body (for calorie estimates)
+            Section("Body")
+            BodyCard()
+            Text(
+                "Used only to estimate calories. It never leaves your phone.",
+                style = MType.Body.copy(fontSize = MType.Body.fontSize * 0.88f, color = MColors.Faint),
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
+            )
+
             // ---- Recording
             Section("Recording")
             SectionCard(Modifier.fillMaxWidth()) {
