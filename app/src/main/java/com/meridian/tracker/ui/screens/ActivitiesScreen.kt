@@ -261,7 +261,7 @@ private fun ActivityRow(record: ActivityRecord, onClick: () -> Unit) {
             Text(
                 "${record.sport.label.uppercase()} · ${
                     Instant.ofEpochMilli(record.startTimeMs).atZone(ZoneId.systemDefault()).format(rowFormatter).uppercase()
-                }",
+                }" + (record.feeling?.let { " · ${it.label.uppercase()}" } ?: ""),
                 style = MType.Label,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

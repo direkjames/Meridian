@@ -101,6 +101,7 @@ fun SummaryScreen(
     var renaming by rememberSaveable { mutableStateOf(false) }
     var gpxNote by remember { mutableStateOf<String?>(null) }
     var mediaBusy by remember { mutableStateOf(false) }
+    val detailsFlush = remember(record.id) { DetailsFlush() }
     var saveNote by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -280,6 +281,8 @@ fun SummaryScreen(
                 Spacer(Modifier.height(28.dp))
                 GearSection(record, isNew = isNew, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(28.dp))
+                DetailsSection(record, isNew = isNew, flush = detailsFlush, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(28.dp))
                 MediaSection(record, onBusyChange = { mediaBusy = it }, modifier = Modifier.fillMaxWidth())
 
                 if (profile.samples.isNotEmpty()) {
@@ -313,7 +316,10 @@ fun SummaryScreen(
                             onClick = {
                                 // Wait for photos/videos still being copied, so none are lost.
                                 if (mediaBusy) saveNote = "Hang on, still adding your photos"
-                                else onSave(title.trim().ifEmpty { record.title })
+                                else {
+                                    detailsFlush.action?.invoke() // a note typed a moment ago
+                                    onSave(title.trim().ifEmpty { record.title })
+                                }
                             },
                             icon = MIcons.Check,
                             modifier = Modifier.weight(1.6f),

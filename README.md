@@ -37,6 +37,7 @@ A private, offline-first fitness tracker for Android. No accounts, no feed, and 
 - History with filters, a weekly chart and month groups
 - Route map, splits, pace and elevation charts you can scrub, best pace and highest point
 - **Relative Effort** for every activity
+- **Notes, effort (1 to 10) and how you felt** on every activity; the coach notices when several sessions in a row were tough
 - **Matched routes**: "2nd fastest of 6 on this route" with your times on that route
 - New personal-best and **badge** cards the moment you finish
 - Rename, delete, export GPX, share

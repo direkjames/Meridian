@@ -37,6 +37,31 @@ object ActivityEdits {
         withContext(Dispatchers.IO) { ActivityMedia.delete(id, item) }
     }
 
+    suspend fun setNote(id: String, note: String) {
+        val clean = ActivityDetails.cleanNote(note)
+        edit(id) { r -> r.copy(note = clean) }
+    }
+
+    suspend fun setEffort(id: String, rating: Int?) {
+        val clean = ActivityDetails.cleanEffort(rating)
+        edit(id) { r -> r.copy(perceivedEffort = clean) }
+    }
+
+    suspend fun setFeeling(id: String, feeling: Feeling?) {
+        edit(id) { r -> r.copy(feeling = feeling) }
+    }
+
+    /**
+     * Changes the unsaved draft right now (no waiting), so a note typed a moment ago is part of
+     * the activity the instant Save is tapped. Returns false when [id] isn't the open draft.
+     */
+    fun editDraftNow(id: String, transform: (ActivityRecord) -> ActivityRecord): Boolean {
+        val draft = TrackingManager.draft.value
+        if (draft == null || draft.id != id || ActivityStore.find(id) != null) return false
+        TrackingManager.updateDraft { if (it.id == id) transform(it) else it }
+        return true
+    }
+
     suspend fun setGear(id: String, gearIds: List<String>) {
         val clean = gearIds.distinct().take(GearMath.MAX_PER_ACTIVITY)
         edit(id) { r -> r.copy(gearIds = clean) }

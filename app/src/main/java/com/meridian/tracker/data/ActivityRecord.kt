@@ -9,6 +9,34 @@ enum class MediaKind { PHOTO, VIDEO }
 /** [file] is a plain file name inside the activity's media folder (never a path). */
 data class MediaItem(val id: String, val kind: MediaKind, val file: String, val addedMs: Long)
 
+/** How the athlete felt afterwards. */
+enum class Feeling(val label: String) {
+    GREAT("Great"),
+    GOOD("Good"),
+    OKAY("Okay"),
+    TIRED("Tired"),
+    HURTING("Hurting"),
+}
+
+/** Rules for the "how it went" fields, shared by the editor, saving and loading. */
+object ActivityDetails {
+    const val MAX_NOTE = 500
+
+    fun cleanNote(note: String): String = note.trim().take(MAX_NOTE)
+
+    /** A 1 to 10 effort rating, or null when missing or out of range. */
+    fun cleanEffort(value: Int?): Int? = value?.takeIf { it in 1..10 }
+
+    fun effortWord(rating: Int): String = when (rating) {
+        in 1..2 -> "Very easy"
+        in 3..4 -> "Easy"
+        in 5..6 -> "Moderate"
+        in 7..8 -> "Hard"
+        9 -> "Very hard"
+        else -> "All out"
+    }
+}
+
 /** A timed reading: heart rate (beats per minute) or cadence (steps per minute). [time] is wall-clock ms. */
 data class Sample(val time: Long, val value: Int)
 
@@ -38,6 +66,11 @@ data class ActivityRecord(
     val media: List<MediaItem> = emptyList(),
     /** Shoes, bikes… used for this activity (ids from [ExtrasStore.gear]). */
     val gearIds: List<String> = emptyList(),
+    /** What the athlete wrote about this activity. */
+    val note: String = "",
+    /** Perceived effort, 1 (very easy) to 10 (all out), or null when not rated. */
+    val perceivedEffort: Int? = null,
+    val feeling: Feeling? = null,
 ) {
     /** Average pace in seconds per km, or null if not meaningful. */
     val avgPaceSecPerKm: Double?

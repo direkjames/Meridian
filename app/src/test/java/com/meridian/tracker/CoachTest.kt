@@ -172,4 +172,31 @@ class CoachTest {
         advise(listOf(bad, zero))
         advise(listOf(bad))
     }
+
+    @Test fun threeToughSessionsInAWeekTriggerTheFeelingTip() {
+        val tired = listOf(
+            run(daysAgo = 1).copy(feeling = com.meridian.tracker.data.Feeling.TIRED),
+            run(daysAgo = 3).copy(perceivedEffort = 9),
+            run(daysAgo = 5),
+        )
+        assertTrue(advise(tired).tips.any { it.kind == TipKind.FEEL })
+    }
+
+    @Test fun oneToughSessionIsNotEnoughForTheFeelingTip() {
+        val mostlyFine = listOf(
+            run(daysAgo = 1).copy(feeling = com.meridian.tracker.data.Feeling.TIRED),
+            run(daysAgo = 3).copy(perceivedEffort = 4),
+            run(daysAgo = 5).copy(feeling = com.meridian.tracker.data.Feeling.GOOD),
+        )
+        assertFalse(advise(mostlyFine).tips.any { it.kind == TipKind.FEEL })
+    }
+
+    @Test fun oldToughSessionsAreIgnored() {
+        val old = listOf(
+            run(daysAgo = 12).copy(feeling = com.meridian.tracker.data.Feeling.HURTING),
+            run(daysAgo = 14).copy(perceivedEffort = 10),
+            run(daysAgo = 15).copy(perceivedEffort = 9),
+        )
+        assertFalse(advise(old).tips.any { it.kind == TipKind.FEEL })
+    }
 }
