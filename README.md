@@ -63,6 +63,7 @@ A private, offline-first fitness tracker for Android. No accounts, no feed, and 
 **Maps**
 - Dark map (OpenStreetMap via MapLibre, no API key), cached for offline use, plus **offline area downloads**
 - **Route builder**: tap to draw, loop back or out-and-back, then save and follow
+- **Plan a route from a distance**: type how far, pick loop or out-and-back, on foot or by bike, and Meridian plans it from where you stand using the free OpenStreetMap routing service (your location is sent, and the app says so first)
 
 **Sharing**
 - Transparent PNG stickers (Stats, Route, Minimal) and a solid Card, in white, yellow or black ink

@@ -244,11 +244,29 @@ fun RouteBuilderScreen(onBack: () -> Unit, onFollow: () -> Unit) {
     val points = remember { mutableStateListOf<Pair<Double, Double>>() }
     var name by rememberSaveable { mutableStateOf("") }
     var savedNote by remember { mutableStateOf<String?>(null) }
+    var generating by rememberSaveable { mutableStateOf(false) }
+    var planNote by remember { mutableStateOf<String?>(null) }
+    var fitRequest by remember { mutableStateOf(0) }
     val distance = points.zipWithNext().sumOf { (a, b) -> Geo.distanceM(a.first, a.second, b.first, b.second) }
+
+    if (generating) {
+        GenerateRouteDialog(
+            onDismiss = { generating = false },
+            onRoute = { r ->
+                points.clear()
+                points.addAll(r.points)
+                if (name.isEmpty()) name = r.name
+                planNote = r.summary
+                savedNote = null
+                generating = false
+                fitRequest++
+            },
+        )
+    }
 
     Column(Modifier.fillMaxSize().background(MColors.Bg)) {
         Box(Modifier.fillMaxWidth().weight(1f)) {
-            val (_, style) = rememberStyledMap { m, s ->
+            val (map, style) = rememberStyledMap { m, s ->
                 s.addSource(GeoJsonSource("draft-line"))
                 s.addSource(GeoJsonSource("draft-pts"))
                 s.addLayer(
@@ -272,6 +290,15 @@ fun RouteBuilderScreen(onBack: () -> Unit, onFollow: () -> Unit) {
                     points.add(ll.latitude to ll.longitude)
                     true
                 }
+            }
+            // After a route is planned, zoom the map to show all of it.
+            LaunchedEffect(map, fitRequest) {
+                val m = map ?: return@LaunchedEffect
+                if (fitRequest == 0 || points.size < 2) return@LaunchedEffect
+                val bounds = LatLngBounds.Builder()
+                    .includes(points.map { LatLng(it.first, it.second) })
+                    .build()
+                m.easeCamera(CameraUpdateFactory.newLatLngBounds(bounds, 120), 600)
             }
             LaunchedEffect(style, points.toList()) {
                 val s = style ?: return@LaunchedEffect
@@ -324,11 +351,27 @@ fun RouteBuilderScreen(onBack: () -> Unit, onFollow: () -> Unit) {
             }
             Text("Straight lines between taps. Add more points along curves for accuracy.", style = MType.Body.copy(fontSize = MType.Body.fontSize * 0.85f))
             Spacer(Modifier.height(12.dp))
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(44.dp)
+                    .clip(CircleShape)
+                    .border(1.dp, MColors.Accent.copy(alpha = 0.6f), CircleShape)
+                    .clickable(role = Role.Button) { generating = true },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("PLAN A ROUTE FROM A DISTANCE", style = MType.Label.copy(color = MColors.Accent), maxLines = 1)
+            }
+            planNote?.let {
+                Spacer(Modifier.height(6.dp))
+                Text(it.uppercase(), style = MType.Label.copy(color = MColors.Accent))
+            }
+            Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 SmallAction("Undo", points.isNotEmpty(), Modifier.weight(1f)) { points.removeAt(points.lastIndex) }
                 SmallAction("Loop back", points.size >= 2, Modifier.weight(1f)) { points.add(points.first()) }
                 SmallAction("Out & back", points.size >= 2, Modifier.weight(1f)) { points.addAll(points.dropLast(1).reversed()) }
-                SmallAction("Clear", points.isNotEmpty(), Modifier.weight(1f)) { points.clear() }
+                SmallAction("Clear", points.isNotEmpty(), Modifier.weight(1f)) { points.clear(); planNote = null }
             }
             Spacer(Modifier.height(14.dp))
             Box(
