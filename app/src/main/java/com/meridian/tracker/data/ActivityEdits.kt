@@ -51,6 +51,11 @@ object ActivityEdits {
         edit(id) { r -> r.copy(perceivedEffort = clean) }
     }
 
+    /** Adds the weather tag once; never replaces one that's there. */
+    suspend fun setWeather(id: String, weather: Weather) {
+        edit(id) { r -> if (r.weather == null && WeatherTag.valid(weather)) r.copy(weather = weather) else r }
+    }
+
     suspend fun setFeeling(id: String, feeling: Feeling?) {
         edit(id) { r -> r.copy(feeling = feeling) }
     }

@@ -369,6 +369,7 @@ object ActivityStore {
         if (r.note.isNotBlank()) put("note", r.note)
         r.perceivedEffort?.let { put("rpe", it) }
         r.feeling?.let { put("feel", it.name) }
+        r.weather?.let { put("wx", JSONObject().put("c", it.code).put("t", it.tempC).put("w", it.windKmh)) }
     }
 
     private fun mediaFromJson(o: JSONObject): List<MediaItem> {
@@ -444,6 +445,9 @@ object ActivityStore {
             note = ActivityDetails.cleanNote(o.optString("note", "")),
             perceivedEffort = ActivityDetails.cleanEffort(if (o.has("rpe")) o.optInt("rpe") else null),
             feeling = if (o.has("feel")) runCatching { Feeling.valueOf(o.getString("feel")) }.getOrNull() else null,
+            weather = o.optJSONObject("wx")?.let { w ->
+                runCatching { Weather(w.getInt("c"), w.getDouble("t"), w.getDouble("w")) }.getOrNull()?.takeIf(WeatherTag::valid)
+            },
         )
     }
 }

@@ -71,6 +71,8 @@ data class ActivityRecord(
     /** Perceived effort, 1 (very easy) to 10 (all out), or null when not rated. */
     val perceivedEffort: Int? = null,
     val feeling: Feeling? = null,
+    /** Conditions at the start, looked up online (see [WeatherTag]). */
+    val weather: Weather? = null,
 ) {
     /** Average pace in seconds per km, or null if not meaningful. */
     val avgPaceSecPerKm: Double?

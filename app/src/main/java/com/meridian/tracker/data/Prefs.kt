@@ -40,6 +40,10 @@ object Prefs {
     /** Weight, birth year and sex, used only for calorie estimates. Stays on the phone. */
     val body: StateFlow<Body> = _body.asStateFlow()
 
+    private val _weatherTag = MutableStateFlow(true)
+    /** Look up the weather for each activity (sends an approximate location to Open-Meteo). */
+    val weatherTag: StateFlow<Boolean> = _weatherTag.asStateFlow()
+
     private val _zones = MutableStateFlow<List<PrivacyZone>>(emptyList())
     /** Places where the start and end of a route are hidden in shares and GPX exports. */
     val zones: StateFlow<List<PrivacyZone>> = _zones.asStateFlow()
@@ -80,6 +84,7 @@ object Prefs {
         _autoBackupUri.value = sp.getString("autoBackupUri", null)
         _backupVideos.value = sp.getBoolean("backupVideos", false)
         _lastBackupMs.value = sp.getLong("lastBackupMs", 0L)
+        _weatherTag.value = sp.getBoolean("weatherTag", true)
         _zones.value = decodeZones(sp.getString("privacyZones", null))
         val kg = sp.getFloat("bodyWeightKg", 0f).toDouble()
         _body.value = Body(
@@ -206,6 +211,11 @@ object Prefs {
             PrivacyZones.clean(PrivacyZone(o.getString("id"), o.optString("name"), o.getDouble("lat"), o.getDouble("lon"), o.getDouble("r")))
         }.take(PrivacyZones.MAX_ZONES)
     }.getOrDefault(emptyList())
+
+    fun setWeatherTag(v: Boolean) {
+        _weatherTag.value = v
+        sp.edit().putBoolean("weatherTag", v).apply()
+    }
 
     fun setBackupVideos(v: Boolean) {
         _backupVideos.value = v
