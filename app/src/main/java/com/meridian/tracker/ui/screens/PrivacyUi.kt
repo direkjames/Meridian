@@ -91,7 +91,7 @@ fun PrivacyZonesCard() {
 }
 
 @SuppressLint("MissingPermission")
-private fun currentLocation(context: android.content.Context, onResult: (Location?) -> Unit) {
+internal fun currentLocation(context: android.content.Context, onResult: (Location?) -> Unit) {
     val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
     if (!granted) return onResult(null)
     LocationServices.getFusedLocationProviderClient(context)
