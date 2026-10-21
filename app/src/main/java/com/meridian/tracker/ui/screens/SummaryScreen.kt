@@ -114,7 +114,7 @@ fun SummaryScreen(
     val scope = rememberCoroutineScope()
     val gpxPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/gpx+xml")) { uri ->
         if (uri != null) scope.launch {
-            gpxNote = if (DataTransfer.exportGpx(context, record, uri)) "GPX FILE SAVED" else "COULDN'T SAVE THE GPX FILE"
+            gpxNote = if (DataTransfer.exportGpx(context, record, uri)) "GPX FILE SAVED" + (if (Prefs.zones.value.isNotEmpty()) " · PRIVACY ZONES APPLIED" else "") else "COULDN'T SAVE THE GPX FILE"
         }
     }
     val profile = remember(record.id, record.points.size) { ActivityAnalysis.profile(record.points) }

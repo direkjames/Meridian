@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.meridian.tracker.ui.Format
 import kotlinx.coroutines.flow.MutableStateFlow
+import org.json.JSONArray
+import org.json.JSONObject
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
@@ -37,6 +39,10 @@ object Prefs {
     private val _body = MutableStateFlow(Body())
     /** Weight, birth year and sex, used only for calorie estimates. Stays on the phone. */
     val body: StateFlow<Body> = _body.asStateFlow()
+
+    private val _zones = MutableStateFlow<List<PrivacyZone>>(emptyList())
+    /** Places where the start and end of a route are hidden in shares and GPX exports. */
+    val zones: StateFlow<List<PrivacyZone>> = _zones.asStateFlow()
 
     private val _lastBackupMs = MutableStateFlow(0L)
     val lastBackupMs: StateFlow<Long> = _lastBackupMs.asStateFlow()
@@ -74,6 +80,7 @@ object Prefs {
         _autoBackupUri.value = sp.getString("autoBackupUri", null)
         _backupVideos.value = sp.getBoolean("backupVideos", false)
         _lastBackupMs.value = sp.getLong("lastBackupMs", 0L)
+        _zones.value = decodeZones(sp.getString("privacyZones", null))
         val kg = sp.getFloat("bodyWeightKg", 0f).toDouble()
         _body.value = Body(
             weightKg = if (kg in 30.0..300.0) kg else Calories.DEFAULT_WEIGHT_KG,
@@ -167,6 +174,38 @@ object Prefs {
         _body.value = _body.value.copy(sex = sex)
         sp.edit().putString("bodySex", sex?.name).apply()
     }
+
+    /** Adds a zone (up to [PrivacyZones.MAX_ZONES]). Returns false when it was refused. */
+    @Synchronized
+    fun addZone(zone: PrivacyZone): Boolean {
+        val ok = PrivacyZones.clean(zone) ?: return false
+        if (_zones.value.size >= PrivacyZones.MAX_ZONES) return false
+        saveZones(_zones.value.filterNot { it.id == ok.id } + ok)
+        return true
+    }
+
+    @Synchronized
+    fun removeZone(id: String) = saveZones(_zones.value.filterNot { it.id == id })
+
+    private fun saveZones(list: List<PrivacyZone>) {
+        _zones.value = list
+        sp.edit().putString("privacyZones", encodeZones(list)).apply()
+    }
+
+    private fun encodeZones(list: List<PrivacyZone>): String = JSONArray().also { arr ->
+        list.forEach {
+            arr.put(JSONObject().put("id", it.id).put("name", it.name).put("lat", it.lat).put("lon", it.lon).put("r", it.radiusM))
+        }
+    }.toString()
+
+    /** A damaged or missing value gives no zones rather than a crash. */
+    private fun decodeZones(text: String?): List<PrivacyZone> = runCatching {
+        val arr = JSONArray(text ?: return emptyList())
+        (0 until arr.length()).mapNotNull { i ->
+            val o = arr.getJSONObject(i)
+            PrivacyZones.clean(PrivacyZone(o.getString("id"), o.optString("name"), o.getDouble("lat"), o.getDouble("lon"), o.getDouble("r")))
+        }.take(PrivacyZones.MAX_ZONES)
+    }.getOrDefault(emptyList())
 
     fun setBackupVideos(v: Boolean) {
         _backupVideos.value = v

@@ -177,6 +177,15 @@ fun SettingsScreen(onBack: () -> Unit, onOpenOfflineMaps: () -> Unit, onOpenSens
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
             )
 
+            // ---- Privacy
+            Section("Privacy")
+            PrivacyZonesCard()
+            Text(
+                "Zones only change what you share or export as GPX. Your saved activities and backups keep the full route.",
+                style = MType.Body.copy(fontSize = MType.Body.fontSize * 0.88f, color = MColors.Faint),
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
+            )
+
             // ---- Recording
             Section("Recording")
             SectionCard(Modifier.fillMaxWidth()) {
