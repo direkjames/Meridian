@@ -70,6 +70,7 @@ import com.meridian.tracker.ui.components.CircleIconButton
 import com.meridian.tracker.ui.components.MIcons
 import com.meridian.tracker.ui.components.PillButton
 import com.meridian.tracker.ui.components.Segmented
+import com.meridian.tracker.data.Prefs
 import com.meridian.tracker.ui.theme.MColors
 import com.meridian.tracker.ui.theme.MType
 import kotlinx.coroutines.Dispatchers
@@ -250,6 +251,10 @@ fun ShareScreen(record: ActivityRecord, onBack: () -> Unit) {
                     Spacer(Modifier.width(8.dp))
                 }
                 if (options.layout.transparent) ToggleChip("Shadow", shadow) { shadow = !shadow }
+            }
+            if (Prefs.zones.value.isNotEmpty() && record.points.isNotEmpty()) {
+                Spacer(Modifier.height(10.dp))
+                Text("PRIVACY ZONES HIDE THE START AND END OF THE ROUTE", style = MType.Label.copy(color = MColors.Faint))
             }
             if (photos.isNotEmpty()) {
                 Spacer(Modifier.height(14.dp))

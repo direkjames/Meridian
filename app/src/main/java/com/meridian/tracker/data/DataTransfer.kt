@@ -240,13 +240,14 @@ object DataTransfer {
 
     suspend fun exportGpx(context: Context, record: ActivityRecord, uri: Uri): Boolean = withContext(Dispatchers.IO) {
         runCatching {
-            openForWrite(context, uri).use { it.write(TrackFormats.writeGpx(record).toByteArray()) }
+            openForWrite(context, uri).use { it.write(TrackFormats.writeGpx(PrivacyZones.apply(record, Prefs.zones.value)).toByteArray()) }
         }.isSuccess
     }
 
     /** Every activity as a GPX file inside one ZIP. */
     suspend fun exportAllGpx(context: Context, uri: Uri): Int = withContext(Dispatchers.IO) {
         val all = ActivityStore.activities.value
+        val zones = Prefs.zones.value
         openForWrite(context, uri).use { out ->
             ZipOutputStream(out.buffered()).use { zip ->
                 val used = HashSet<String>()
@@ -255,7 +256,7 @@ object DataTransfer {
                     var n = 2
                     while (!used.add(name)) name = TrackFormats.fileName(r).removeSuffix(".gpx") + "-${n++}.gpx"
                     zip.putNextEntry(ZipEntry(name))
-                    zip.write(TrackFormats.writeGpx(r).toByteArray())
+                    zip.write(TrackFormats.writeGpx(PrivacyZones.apply(r, zones)).toByteArray())
                     zip.closeEntry()
                 }
             }

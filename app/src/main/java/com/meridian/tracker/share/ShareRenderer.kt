@@ -15,6 +15,8 @@ import com.meridian.tracker.R
 import com.meridian.tracker.data.ActivityMedia
 import com.meridian.tracker.data.ActivityRecord
 import com.meridian.tracker.data.Period
+import com.meridian.tracker.data.Prefs
+import com.meridian.tracker.data.PrivacyZones
 import com.meridian.tracker.data.Review
 import com.meridian.tracker.tracking.TrackPoint
 import com.meridian.tracker.ui.Format
@@ -80,7 +82,9 @@ object ShareRenderer {
 
     // ---- Activity images ---------------------------------------------------------------------
 
-    fun render(context: Context, record: ActivityRecord, options: ShareOptions): Bitmap {
+    fun render(context: Context, source: ActivityRecord, options: ShareOptions): Bitmap {
+        // Privacy zones hide the start and end of the route before anything is drawn.
+        val record = PrivacyZones.apply(source, Prefs.zones.value)
         val fonts = Fonts(context)
         val photo = options.photoPath?.let { loadPhoto(it) }
         if (options.layout == ShareLayout.CARD) return card(fonts, record, options, photo)

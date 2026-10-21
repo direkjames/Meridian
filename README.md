@@ -67,6 +67,7 @@ A private, offline-first fitness tracker for Android. No accounts, no feed, and 
 **Sharing**
 - Transparent PNG stickers (Stats, Route, Minimal) and a solid Card, in white, yellow or black ink
 - Save to Photos, open Instagram (add it with the Photo sticker), or share anywhere
+- **Privacy zones**: hide your home or work from the start and end of shared routes and exported GPX files (backups keep everything)
 
 **Your data**
 - Import your **Strava archive ZIP** (GPX / TCX / FIT, names and sports kept), or single files
