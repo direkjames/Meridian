@@ -3,6 +3,12 @@ package com.meridian.tracker.data
 import com.meridian.tracker.tracking.Sport
 import com.meridian.tracker.tracking.TrackPoint
 
+/** A photo or a video attached to an activity. */
+enum class MediaKind { PHOTO, VIDEO }
+
+/** [file] is a plain file name inside the activity's media folder (never a path). */
+data class MediaItem(val id: String, val kind: MediaKind, val file: String, val addedMs: Long)
+
 /** A timed reading: heart rate (beats per minute) or cadence (steps per minute). [time] is wall-clock ms. */
 data class Sample(val time: Long, val value: Int)
 
@@ -28,6 +34,10 @@ data class ActivityRecord(
     val steps: Int? = null,
     /** Where it came from when not recorded by Meridian, e.g. "Fitbit" (via Health Connect). */
     val source: String? = null,
+    /** Photos and videos added after the activity, at most [ActivityMedia.MAX_PER_ACTIVITY]. */
+    val media: List<MediaItem> = emptyList(),
+    /** Shoes, bikes… used for this activity (ids from [ExtrasStore.gear]). */
+    val gearIds: List<String> = emptyList(),
 ) {
     /** Average pace in seconds per km, or null if not meaningful. */
     val avgPaceSecPerKm: Double?

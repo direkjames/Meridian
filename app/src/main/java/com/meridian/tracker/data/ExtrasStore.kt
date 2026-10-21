@@ -36,7 +36,8 @@ object ExtrasStore {
     private const val GOALS = "goals.json"
     private const val ROUTES = "routes.json"
     private const val SEEN = "badges_seen.json"
-    val FILES = listOf(PLAN, GOALS, ROUTES, SEEN)
+    private const val GEAR = "gear.json"
+    val FILES = listOf(PLAN, GOALS, ROUTES, SEEN, GEAR)
 
     private lateinit var dir: File
 
@@ -51,6 +52,10 @@ object ExtrasStore {
 
     private val _seenBadges = MutableStateFlow<Set<String>>(emptySet())
     val seenBadges: StateFlow<Set<String>> = _seenBadges.asStateFlow()
+
+    private val _gear = MutableStateFlow<List<Gear>>(emptyList())
+    /** Shoes, bikes and other gear, newest first. */
+    val gear: StateFlow<List<Gear>> = _gear.asStateFlow()
 
     private val _planCompletedMs = MutableStateFlow<Long?>(null)
     val planCompletedMs: StateFlow<Long?> = _planCompletedMs.asStateFlow()
@@ -69,6 +74,7 @@ object ExtrasStore {
         _plan.value = read(PLAN)?.let { runCatching { planFromJson(JSONObject(it)) }.getOrNull() }
         _goals.value = read(GOALS)?.let { runCatching { goalsFromJson(JSONArray(it)) }.getOrNull() }.orEmpty()
         _routes.value = read(ROUTES)?.let { runCatching { routesFromJson(JSONArray(it)) }.getOrNull() }.orEmpty()
+        _gear.value = read(GEAR)?.let { runCatching { gearFromJson(JSONArray(it)) }.getOrNull() }.orEmpty()
         read(SEEN)?.let {
             runCatching {
                 val o = JSONObject(it)
@@ -121,6 +127,23 @@ object ExtrasStore {
         changed()
     }
 
+    // ---- Gear ---------------------------------------------------------------------------------
+
+    @Synchronized
+    fun saveGear(item: Gear) {
+        _gear.value = (_gear.value.filterNot { it.id == item.id } + item).sortedByDescending { it.createdMs }
+        write(GEAR, gearToJson(_gear.value).toString())
+        changed()
+    }
+
+    /** Activities keep the id, but deleted gear is simply no longer shown or counted. */
+    @Synchronized
+    fun deleteGear(id: String) {
+        _gear.value = _gear.value.filterNot { it.id == id }
+        write(GEAR, gearToJson(_gear.value).toString())
+        changed()
+    }
+
     // ---- Badges -------------------------------------------------------------------------------
 
     fun markBadgesSeen(ids: Collection<String>) {
@@ -157,6 +180,12 @@ object ExtrasStore {
             }
         }
         files[SEEN]?.let { if (read(SEEN) == null) write(SEEN, it) }
+        files[GEAR]?.let { text ->
+            runCatching { gearFromJson(JSONArray(text)) }.getOrNull()?.let { incoming ->
+                val merged = (_gear.value + incoming.filter { g -> _gear.value.none { it.id == g.id } })
+                write(GEAR, gearToJson(merged).toString())
+            }
+        }
         reload()
         changed()
     }
@@ -226,6 +255,36 @@ object ExtrasStore {
             sport = if (o.isNull("sport")) null else runCatching { Sport.valueOf(o.getString("sport")) }.getOrNull(),
         )
     }
+
+    private fun gearToJson(items: List<Gear>) = JSONArray().apply {
+        items.forEach { g ->
+            put(
+                JSONObject()
+                    .put("id", g.id)
+                    .put("name", g.name)
+                    .put("type", g.type.name)
+                    .put("limit", g.limitM ?: JSONObject.NULL)
+                    .put("start", g.startM)
+                    .put("retired", g.retired)
+                    .put("created", g.createdMs)
+            )
+        }
+    }
+
+    private fun gearFromJson(a: JSONArray): List<Gear> = List(a.length()) { i ->
+        runCatching {
+            val o = a.getJSONObject(i)
+            Gear(
+                id = o.getString("id"),
+                name = GearMath.cleanName(o.getString("name")).ifEmpty { "Gear" },
+                type = runCatching { GearType.valueOf(o.getString("type")) }.getOrDefault(GearType.OTHER),
+                limitM = if (o.isNull("limit")) null else o.getDouble("limit").takeIf { it > 0 && !it.isNaN() },
+                startM = o.optDouble("start", 0.0).takeIf { !it.isNaN() && it >= 0 } ?: 0.0,
+                retired = o.optBoolean("retired", false),
+                createdMs = o.optLong("created", 0L),
+            )
+        }.getOrNull()
+    }.filterNotNull().distinctBy { it.id }.sortedByDescending { it.createdMs }
 
     private fun routesToJson(routes: List<PlannedRoute>) = JSONArray().apply {
         routes.forEach { r ->

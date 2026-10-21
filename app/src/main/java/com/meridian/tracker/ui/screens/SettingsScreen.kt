@@ -66,7 +66,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit, onOpenOfflineMaps: () -> Unit, onOpenSensors: () -> Unit) {
+fun SettingsScreen(onBack: () -> Unit, onOpenOfflineMaps: () -> Unit, onOpenSensors: () -> Unit, onOpenGear: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     BackHandler(onBack = onBack)
@@ -187,6 +187,17 @@ fun SettingsScreen(onBack: () -> Unit, onOpenOfflineMaps: () -> Unit, onOpenSens
                         onClick = { openAppSettings(context) },
                     )
                 }
+            }
+
+            // ---- Gear
+            Section("Gear")
+            SectionCard(Modifier.fillMaxWidth()) {
+                LinkRow(
+                    "Shoes, bikes & gear",
+                    "Track how far your gear has gone and when it's time to replace it.",
+                    icon = MIcons.Shoe,
+                    onClick = onOpenGear,
+                )
             }
 
             // ---- Watches & sensors

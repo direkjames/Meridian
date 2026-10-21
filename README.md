@@ -1,4 +1,4 @@
-# Meridian 1.1
+# Meridian 1.2
 
 A private, offline-first fitness tracker for Android. No accounts, no feed, and your activities never leave your phone.
 
@@ -24,6 +24,13 @@ A private, offline-first fitness tracker for Android. No accounts, no feed, and 
   and steps-per-minute while recording
 - Heart-rate chart, **time in zones** (from your max heart rate), and **Relative Effort from heart rate**
 - Heart rate is kept in GPX exports and read from GPX, TCX and FIT imports
+
+**Photos, videos & gear** (new in 1.2)
+- **Add up to 5 photos or videos** to any activity, from the camera or your gallery, right on the Activity Complete screen
+- **Share with your photo**: pick one of the activity's photos as the background of the share image
+- **Gear**: add your shoes, bike or anything else, tick it on Activity Complete, and see total distance and distance left.
+  Shoes default to a 700 km / 450 mi life (editable) and you get a warning near the end and a **retire** prompt when worn out.
+  Manage everything in Settings › Gear
 
 **Activities**
 - History with filters, a weekly chart and month groups
@@ -106,7 +113,9 @@ app/src/main/java/com/meridian/tracker/
     StepCounter.kt          steps and cadence from the phone's step sensor
   data/
     ActivityStore.kt        activities as JSON on the phone + crash snapshots
-    ExtrasStore.kt          training plan, goals, saved routes, badge history
+    ExtrasStore.kt          training plan, goals, saved routes, gear, badge history
+    ActivityMedia.kt        activity photos and videos (stored privately on the phone)
+    Gear.kt                 gear distance, remaining life and suggestions
     Plan.kt                 training plan generator, progress and adaptation
     PlanReminders.kt        morning reminders and evening nudges (WorkManager)
     Training.kt             relative effort, fitness & freshness, race predictor,
@@ -120,7 +129,7 @@ app/src/main/java/com/meridian/tracker/
     OfflineMaps.kt, Prefs.kt, TileMath.kt
   share/                    share images and sharing
   ui/                       theme, components, screens
-app/src/test/               56 unit tests
+app/src/test/               67 unit tests
 ```
 
 Run the unit tests in Android Studio: right-click `app/src/test` › **Run Tests**.
