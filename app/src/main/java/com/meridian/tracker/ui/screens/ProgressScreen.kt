@@ -136,6 +136,9 @@ fun ProgressScreen(
                 predictions = RacePredictor.predict(all, predictSport, today),
                 predictSport = predictSport,
                 badges = Badges.earned(all, planCompletedMs = planDone),
+                // The coach looks at all sports, whatever the filter, since rest is rest.
+                coachDays = if (filter == null) fitnessDays else Fitness.series(all, today, thresholds = thresholds),
+                thresholds = thresholds,
             )
         }
     }
@@ -247,6 +250,11 @@ fun ProgressScreen(
 
         // Training
         insights?.let { ins ->
+            val gear by ExtrasStore.gear.collectAsStateWithLifecycle()
+            val coachSection: @Composable (Insights) -> Unit = {
+                SectionTitle("Coach")
+                CoachCard(all, it.coachDays, it.weekly, gear, it.thresholds)
+            }
             if (ins.fitness.size >= 2) {
                 SectionTitle("Fitness & freshness")
                 SectionCard(Modifier.fillMaxWidth()) {
@@ -274,6 +282,7 @@ fun ProgressScreen(
                         FitnessChart(ins.fitness)
                     }
                 }
+                coachSection(ins)
                 SectionTitle("Weekly effort")
                 SectionCard(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(20.dp)) {
@@ -299,6 +308,9 @@ fun ProgressScreen(
                         LoadBars(ins.weekly, range)
                     }
                 }
+            } else {
+                // New users, or too little history for the chart: the coach still has a welcome.
+                coachSection(ins)
             }
 
             SectionTitle("Race predictor · ${ins.predictSport.label}")
@@ -422,6 +434,8 @@ private data class Insights(
     val predictions: List<Prediction>,
     val predictSport: Sport,
     val badges: List<EarnedBadge>,
+    val coachDays: List<FitnessDay>,
+    val thresholds: Map<Sport, Double>,
 )
 
 @Composable
