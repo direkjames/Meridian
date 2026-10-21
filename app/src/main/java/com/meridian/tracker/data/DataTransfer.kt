@@ -267,35 +267,70 @@ object DataTransfer {
     // Backup and restore
     // =============================================================================================
 
-    /** Writes a complete backup (every activity, full detail) as a ZIP. */
-    suspend fun writeBackup(context: Context, uri: Uri): Int = withContext(Dispatchers.IO) {
+    /**
+     * Writes a complete backup (every activity, full detail, photos and videos) as a ZIP.
+     * The ZIP is built and checked in the cache first, so a failure while building it never
+     * touches the previous backup. [includeVideos] is off for automatic backups, which rewrite
+     * the whole file after every activity.
+     */
+    suspend fun writeBackup(context: Context, uri: Uri, includeVideos: Boolean = true): Int = withContext(Dispatchers.IO) {
         val all = ActivityStore.activities.value
-        openForWrite(context, uri).use { out ->
-            ZipOutputStream(out.buffered()).use { zip ->
-                zip.putNextEntry(ZipEntry(BACKUP_MANIFEST))
-                zip.write(
-                    JSONObject()
-                        .put("format", "meridian-backup")
-                        .put("version", 1)
-                        .put("created", System.currentTimeMillis())
-                        .put("count", all.size)
-                        .toString().toByteArray()
-                )
+        val tmp = java.io.File(context.cacheDir, "backup-${System.nanoTime()}.zip")
+        try {
+            tmp.outputStream().buffered().use { out -> buildBackupZip(out, all, includeVideos) }
+            verifyBackup(tmp, all.size)
+            openForWrite(context, uri).use { out -> tmp.inputStream().use { it.copyTo(out) } }
+        } finally {
+            tmp.delete()
+        }
+        all.size
+    }
+
+    private fun buildBackupZip(out: OutputStream, all: List<ActivityRecord>, includeVideos: Boolean) {
+        ZipOutputStream(out).use { zip ->
+            zip.putNextEntry(ZipEntry(BACKUP_MANIFEST))
+            zip.write(
+                JSONObject()
+                    .put("format", "meridian-backup")
+                    .put("version", 2)
+                    .put("created", System.currentTimeMillis())
+                    .put("count", all.size)
+                    .toString().toByteArray()
+            )
+            zip.closeEntry()
+            all.forEach { r ->
+                zip.putNextEntry(ZipEntry("activities/${r.id}.json"))
+                zip.write(ActivityStore.encode(r).toByteArray())
                 zip.closeEntry()
-                all.forEach { r ->
-                    zip.putNextEntry(ZipEntry("activities/${r.id}.json"))
-                    zip.write(ActivityStore.encode(r).toByteArray())
-                    zip.closeEntry()
-                }
-                // Training plan, goals, routes and badge history.
-                ExtrasStore.exportFiles().forEach { (name, text) ->
-                    zip.putNextEntry(ZipEntry("${ExtrasStore.DIR}/$name"))
-                    zip.write(text.toByteArray())
+            }
+            // Photos and videos (already compressed, so stored as they are).
+            zip.setLevel(java.util.zip.Deflater.NO_COMPRESSION)
+            all.forEach { r ->
+                ActivityMedia.present(r).forEach { m ->
+                    if (m.kind == MediaKind.VIDEO && !includeVideos) return@forEach
+                    val file = ActivityMedia.fileOf(r.id, m) ?: return@forEach
+                    zip.putNextEntry(ZipEntry("media/${ActivityMedia.backupFolder(r.id)}/${r.id}/${m.file}"))
+                    file.inputStream().use { it.copyTo(zip) }
                     zip.closeEntry()
                 }
             }
+            zip.setLevel(java.util.zip.Deflater.DEFAULT_COMPRESSION)
+            // Training plan, goals, routes and badge history.
+            ExtrasStore.exportFiles().forEach { (name, text) ->
+                zip.putNextEntry(ZipEntry("${ExtrasStore.DIR}/$name"))
+                zip.write(text.toByteArray())
+                zip.closeEntry()
+            }
         }
-        all.size
+    }
+
+    /** Reads the finished ZIP back, so a broken file is never copied over a good backup. */
+    private fun verifyBackup(file: java.io.File, expectedActivities: Int) {
+        java.util.zip.ZipFile(file).use { zf ->
+            if (zf.getEntry(BACKUP_MANIFEST) == null) throw java.io.IOException("Backup is missing its manifest")
+            val found = zf.entries().asSequence().count { it.name.startsWith("activities/") && it.name.endsWith(".json") }
+            if (found != expectedActivities) throw java.io.IOException("Backup is incomplete")
+        }
     }
 
     /** Restores a Meridian backup. Activities already on the phone are kept. Returns how many were added. */
@@ -314,6 +349,12 @@ object DataTransfer {
                             .getOrNull()
                             ?.takeIf { it.id !in have }
                             ?.let { restored.add(it) }
+                    } else if (entry.name.startsWith("media/")) {
+                        // media/<folder>/<activity id>/<file>
+                        val parts = entry.name.split('/')
+                        if (parts.size == 4 && !entry.isDirectory) {
+                            ActivityMedia.restoreFile(parts[2], parts[3], NonClosing(zip))
+                        }
                     } else if (entry.name.startsWith("${ExtrasStore.DIR}/")) {
                         extras[entry.name.substringAfter('/')] = zip.readBytes().toString(Charsets.UTF_8)
                     }
@@ -343,7 +384,7 @@ object DataTransfer {
     }
 
     suspend fun backupNowTo(context: Context, uri: Uri): Boolean = try {
-        writeBackup(context, uri)
+        writeBackup(context, uri, includeVideos = false)
         Prefs.setLastBackup(System.currentTimeMillis())
         _backupError.value = null
         true

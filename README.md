@@ -68,7 +68,7 @@ A private, offline-first fitness tracker for Android. No accounts, no feed, and 
 
 **Your data**
 - Import your **Strava archive ZIP** (GPX / TCX / FIT, names and sports kept), or single files
-- Export GPX (one activity or all), backups and restore, **automatic backup** to a file you pick (Google Drive works), and Android's Google backup
+- Export GPX (one activity or all), backups and restore (photos and videos included in manual backups; automatic backups keep photos), **automatic backup** to a file you pick (Google Drive works), and Android's Google backup
 - Kilometres or miles, GPS accuracy, keep screen on, countdown, background-recording check
 
 ## Build and install

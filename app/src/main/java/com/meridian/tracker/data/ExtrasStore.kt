@@ -324,7 +324,11 @@ object ExtrasStore {
         try {
             val tmp = File(dir, "$name.tmp")
             tmp.writeText(text)
-            tmp.renameTo(File(dir, name))
+            val target = File(dir, name)
+            if (!tmp.renameTo(target)) {
+                target.delete()
+                if (!tmp.renameTo(target)) tmp.delete()
+            }
         } catch (e: Exception) {
             Log.w(TAG, "Couldn't write $name", e)
         }

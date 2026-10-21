@@ -75,7 +75,11 @@ object ActivityStore {
     private fun writeInProgressNow(record: ActivityRecord) {
         val tmp = File(inProgressFile.path + ".tmp")
         tmp.writeText(toJson(record).toString())
-        tmp.renameTo(inProgressFile)
+        if (!tmp.renameTo(inProgressFile)) {
+            // Some file systems refuse to rename over an existing file.
+            inProgressFile.delete()
+            if (!tmp.renameTo(inProgressFile)) throw java.io.IOException("Couldn't replace the in-progress snapshot")
+        }
     }
 
     fun writeInProgress(record: ActivityRecord) {
@@ -138,10 +142,18 @@ object ActivityStore {
     }
 
     private fun writeLocked(records: List<ActivityRecord>) {
+        // Disk first: the in-memory list only changes once the files are really written.
         records.forEach { record ->
             val tmp = File(dir, "${record.id}.json.tmp")
+            val target = File(dir, "${record.id}.json")
             tmp.writeText(toJson(record).toString())
-            tmp.renameTo(File(dir, "${record.id}.json"))
+            if (!tmp.renameTo(target)) {
+                target.delete()
+                if (!tmp.renameTo(target)) {
+                    tmp.delete()
+                    throw java.io.IOException("Couldn't save activity ${record.id}")
+                }
+            }
         }
         val ids = records.map { it.id }.toSet()
         _activities.update { list ->
@@ -177,6 +189,10 @@ object ActivityStore {
                     fromJson(JSONObject(file.readText()))
                 } catch (e: Exception) {
                     Log.w(TAG, "Skipping unreadable activity ${file.name}", e)
+                    null
+                } catch (e: OutOfMemoryError) {
+                    // A huge history on a low-memory phone: skip this one instead of crashing at launch.
+                    Log.w(TAG, "Out of memory reading ${file.name}", e)
                     null
                 }
             }

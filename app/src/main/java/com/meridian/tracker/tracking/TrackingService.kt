@@ -16,6 +16,9 @@ import android.os.Build
 import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
@@ -154,6 +157,8 @@ class TrackingService : Service() {
 
         tickerJob = scope.launch {
             var tick = 0
+            var wasOffRoute = false
+            var targetBuzzed = false
             while (isActive) {
                 if (TrackingManager.state.value.status == RecordStatus.IDLE) {
                     stopTracking()
@@ -161,6 +166,14 @@ class TrackingService : Service() {
                 }
                 TrackingManager.tick()
                 updateNotification()
+                // Alerts that must work with the screen off and the phone in a pocket.
+                val live = TrackingManager.live.value
+                if (live.offRoute && !wasOffRoute) buzz(longArrayOf(0, 400, 150, 400))
+                wasOffRoute = live.offRoute
+                if (!targetBuzzed && targetReached()) {
+                    targetBuzzed = true
+                    buzz(longArrayOf(0, 250, 120, 250, 120, 600))
+                }
                 // Crash-safe snapshot every ~15 s.
                 if (tick % SNAPSHOT_EVERY_TICKS == 0) {
                     TrackingManager.snapshot()?.let { ActivityStore.writeInProgress(it) }
@@ -168,6 +181,31 @@ class TrackingService : Service() {
                 tick++
                 delay(NOTIFICATION_REFRESH_MS)
             }
+        }
+    }
+
+    /** True once today's plan target (distance or moving time) has been met. */
+    private fun targetReached(): Boolean {
+        val t = TrackingManager.guide.value.target ?: return false
+        val s = TrackingManager.state.value
+        return when {
+            t.distanceM != null && t.distanceM > 0 -> s.distanceM >= t.distanceM
+            t.minutes != null && t.minutes > 0 -> s.movingMs / 60_000.0 >= t.minutes
+            else -> false
+        }
+    }
+
+    private fun buzz(pattern: LongArray) {
+        try {
+            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                (getSystemService(VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                getSystemService(VIBRATOR_SERVICE) as? Vibrator
+            }
+            if (vibrator?.hasVibrator() == true) vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1))
+        } catch (e: Exception) {
+            // A missing or blocked vibrator must never stop a recording.
         }
     }
 
