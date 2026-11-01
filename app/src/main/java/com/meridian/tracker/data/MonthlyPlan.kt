@@ -129,6 +129,8 @@ data class MonthDay(
     val title: String,
     val detail: String,
     val week: Int,
+    /** True when you changed this day yourself (see [MonthlyEdits]). */
+    val edited: Boolean = false,
 ) {
     val isRest: Boolean get() = kind == MonthKind.REST
 }
@@ -140,6 +142,8 @@ data class MonthlyPlan(
     val createdMs: Long,
     /** Index of the lighter week, or -1 when the plan is too short for one. */
     val easyWeek: Int,
+    /** For every day you edited: how it was first planned, so it can be reset. */
+    val originals: Map<LocalDate, MonthDay> = emptyMap(),
 ) {
     fun day(date: LocalDate): MonthDay? = days.firstOrNull { it.date == date }
     val sessions: List<MonthDay> get() = days.filterNot { it.isRest }
@@ -351,7 +355,7 @@ object MonthlyPlanner {
         return cycle[Math.floorMod(i, cycle.size)]
     }
 
-    private fun paceFactor(kind: MonthKind) = when (kind) {
+    internal fun paceFactor(kind: MonthKind) = when (kind) {
         MonthKind.LONG -> 1.05
         MonthKind.TEMPO -> 0.92
         MonthKind.INTERVALS -> 0.97
@@ -361,7 +365,7 @@ object MonthlyPlanner {
         else -> 1.0
     }
 
-    private fun distance(c: MonthConfig, sport: MonthSport, kind: MonthKind, minutes: Double): Double =
+    internal fun distance(c: MonthConfig, sport: MonthSport, kind: MonthKind, minutes: Double): Double =
         minutes * 60.0 / (c.pace(sport) * paceFactor(kind)) * 1_000.0
 
     private fun finish(c: MonthConfig, r: Raw, scale: Double): MonthDay {
@@ -377,7 +381,7 @@ object MonthlyPlanner {
         return MonthDay(r.date, sport, r.kind, minutes, dist, title, detail, r.week)
     }
 
-    private fun describe(c: MonthConfig, s: MonthSport, kind: MonthKind, minutes: Int, week: Int, variant: Int): Pair<String, String> {
+    internal fun describe(c: MonthConfig, s: MonthSport, kind: MonthKind, minutes: Int, week: Int, variant: Int): Pair<String, String> {
         val runMin = (1 + week + c.monthIndex).coerceIn(1, 8)
         val walkMin = if (runMin < 4) 2 else 1
         val reps = (4 + week + if (c.theme == MonthTheme.SPEED) 2 else 0).coerceAtMost(10)
@@ -431,7 +435,7 @@ object MonthlyPlanner {
         "Rest up. Tomorrow will feel better for it.",
     )
 
-    private fun roundTo(v: Double, step: Double) = (v / step).roundToInt() * step
+    internal fun roundTo(v: Double, step: Double) = (v / step).roundToInt() * step
 
     // ---- Progress ---------------------------------------------------------------------------
 
@@ -473,6 +477,8 @@ object MonthlyPlanner {
 
     fun completion(plan: MonthlyPlan, status: Map<LocalDate, DayStatus>): Pair<Int, Int> {
         val sessions = plan.sessions
-        return sessions.count { status[it.date] == DayStatus.DONE } to sessions.size
+        // Turning sessions into rest days doesn't shrink the total below what was first planned.
+        val planned = plan.days.count { !(plan.originals[it.date] ?: it).isRest }
+        return sessions.count { status[it.date] == DayStatus.DONE } to max(sessions.size, planned)
     }
 }

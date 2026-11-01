@@ -47,6 +47,8 @@ data class PlanDay(
     val title: String,
     val detail: String,
     val week: Int,
+    /** True when you changed this day yourself (see [PlanEdits]). */
+    val edited: Boolean = false,
 ) {
     val isRest: Boolean get() = kind == SessionKind.REST
 }
@@ -60,6 +62,8 @@ data class TrainingPlan(
     val compressed: Boolean,
     /** The longest training session before the event. */
     val longestM: Double = 0.0,
+    /** For every day you edited: how the generator first planned it, so it can be reset. */
+    val originals: Map<LocalDate, PlanDay> = emptyMap(),
 ) {
     fun day(date: LocalDate): PlanDay? = days.firstOrNull { it.date == date }
     val sessions: List<PlanDay> get() = days.filterNot { it.isRest }
@@ -206,16 +210,18 @@ object PlanGenerator {
         PlanMode.RUN_WALK -> if (index == 1 && !easyWeek) SessionKind.BRISK_WALK else SessionKind.RUN_WALK
     }
 
+    internal fun paceFactor(kind: SessionKind) = when (kind) {
+        SessionKind.LONG -> 1.05
+        SessionKind.TEMPO -> 0.9
+        SessionKind.BRISK_WALK -> 0.9
+        else -> 1.0
+    }
+
     private fun rest(date: LocalDate, week: Int, detail: String) =
         PlanDay(date, SessionKind.REST, 0.0, 0, "Rest", detail, week)
 
-    private fun session(c: PlanConfig, kind: SessionKind, distanceM: Double, date: LocalDate, week: Int, extra: String, weeks: Int = 1): PlanDay {
-        val paceFactor = when (kind) {
-            SessionKind.LONG -> 1.05
-            SessionKind.TEMPO -> 0.9
-            SessionKind.BRISK_WALK -> 0.9
-            else -> 1.0
-        }
+    internal fun session(c: PlanConfig, kind: SessionKind, distanceM: Double, date: LocalDate, week: Int, extra: String, weeks: Int = 1): PlanDay {
+        val paceFactor = paceFactor(kind)
         val dist = (distanceM / 100.0).roundToInt() * 100.0
         val minutes = max(10, ((dist / 1000.0) * c.paceSecPerKm * paceFactor / 60.0 / 5).roundToInt() * 5)
         val noun = when (c.mode) {
@@ -290,7 +296,7 @@ object PlanGenerator {
     fun adjusted(plan: TrainingPlan, status: Map<LocalDate, DayStatus>): List<PlanDay> {
         val longByWeek = plan.days.filter { it.kind == SessionKind.LONG }.associateBy { it.week }
         return plan.days.map { day ->
-            if (day.kind != SessionKind.LONG) return@map day
+            if (day.kind != SessionKind.LONG || day.edited) return@map day
             val prev = longByWeek[day.week - 1] ?: return@map day
             if (status[prev.date] == DayStatus.MISSED && prev.distanceM < day.distanceM) {
                 day.copy(
@@ -306,6 +312,9 @@ object PlanGenerator {
 
     fun completion(plan: TrainingPlan, status: Map<LocalDate, DayStatus>): Pair<Int, Int> {
         val sessions = plan.sessions
-        return sessions.count { status[it.date] == DayStatus.DONE } to sessions.size
+        // Turning sessions into rest days doesn't make the plan easier to finish: the total never
+        // drops below what Meridian first planned.
+        val planned = plan.days.count { !(plan.originals[it.date] ?: it).isRest }
+        return sessions.count { status[it.date] == DayStatus.DONE } to max(sessions.size, planned)
     }
 }

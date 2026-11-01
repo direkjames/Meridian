@@ -59,6 +59,8 @@ import com.meridian.tracker.data.MonthConfig
 import com.meridian.tracker.data.MonthDay
 import com.meridian.tracker.data.MonthGoal
 import com.meridian.tracker.data.MonthSport
+import com.meridian.tracker.data.MonthKind
+import com.meridian.tracker.data.MonthlyEdits
 import com.meridian.tracker.data.MonthTheme
 import com.meridian.tracker.data.MonthlyPlan
 import com.meridian.tracker.data.MonthlyPlanner
@@ -497,6 +499,8 @@ private fun MonthlyView(plan: MonthlyPlan, eventPlan: TrainingPlan?, onStartSess
         mutableLongStateOf(today.clampTo(cfg.startDate, cfg.endDate).toEpochDay())
     }
     var confirmDelete by remember { mutableStateOf(false) }
+    var confirmResetAll by remember { mutableStateOf(false) }
+    var editingDay by rememberSaveable(plan.id) { mutableLongStateOf(-1L) }
     val ended = today.isAfter(cfg.endDate)
     val upcoming = today.isBefore(cfg.startDate)
 
@@ -574,7 +578,10 @@ private fun MonthlyView(plan: MonthlyPlan, eventPlan: TrainingPlan?, onStartSess
         val todayDay = plan.day(today)
         if (todayDay != null) {
             Spacer(Modifier.height(14.dp))
-            DayCard(plan, todayDay, status[today], eventDays[today]?.title, isToday = true, onStartSession = onStartSession)
+            DayCard(
+                plan, todayDay, status[today], eventDays[today]?.title, isToday = true, onStartSession = onStartSession,
+                onEdit = if (MonthlyEdits.canEdit(plan, today, today) && status[today] != DayStatus.DONE) ({ editingDay = today.toEpochDay() }) else null,
+            )
         }
 
         // Calendar
@@ -599,7 +606,10 @@ private fun MonthlyView(plan: MonthlyPlan, eventPlan: TrainingPlan?, onStartSess
         val picked = plan.day(LocalDate.ofEpochDay(selectedDay))
         if (picked != null && picked.date != today) {
             Spacer(Modifier.height(10.dp))
-            DayCard(plan, picked, status[picked.date], eventDays[picked.date]?.title, isToday = false, onStartSession = onStartSession)
+            DayCard(
+                plan, picked, status[picked.date], eventDays[picked.date]?.title, isToday = false, onStartSession = onStartSession,
+                onEdit = if (MonthlyEdits.canEdit(plan, picked.date, today) && status[picked.date] != DayStatus.DONE) ({ editingDay = picked.date.toEpochDay() }) else null,
+            )
         }
 
         // Weeks
@@ -635,6 +645,16 @@ private fun MonthlyView(plan: MonthlyPlan, eventPlan: TrainingPlan?, onStartSess
         }
 
         Spacer(Modifier.height(24.dp))
+        if (plan.originals.isNotEmpty()) {
+            PillButton(
+                "Reset ${plan.originals.size} edited ${if (plan.originals.size == 1) "day" else "days"}",
+                onClick = { confirmResetAll = true },
+                filled = false,
+                modifier = Modifier.fillMaxWidth(),
+                height = 52.dp,
+            )
+            Spacer(Modifier.height(10.dp))
+        }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             PillButton(if (ended) "Plan next month" else "New month", onClick = onNewMonth, filled = ended, modifier = Modifier.weight(1f), height = 52.dp)
             PillButton("Delete plan", onClick = { confirmDelete = true }, filled = false, modifier = Modifier.weight(1f), height = 52.dp)
@@ -642,6 +662,69 @@ private fun MonthlyView(plan: MonthlyPlan, eventPlan: TrainingPlan?, onStartSess
         Spacer(Modifier.height(28.dp))
     }
 
+    val editDate = if (editingDay >= 0) LocalDate.ofEpochDay(editingDay) else null
+    val editDay = editDate?.let { plan.day(it) }
+    if (editDate != null && editDay != null && MonthlyEdits.canEdit(plan, editDate, today)) {
+        val byTime = cfg.targetType == TargetType.TIME
+        val main = cfg.sports.first()
+        val startSport = editDay.sport ?: main
+        val model = remember(plan, editDate) {
+            DayEditModel(
+                date = editDate,
+                title = editDay.title,
+                isRest = editDay.isRest,
+                edited = editDay.edited,
+                byTime = byTime,
+                sports = cfg.sports.map { EditChoice(it.name, it.label) },
+                sportKey = startSport.name,
+                kinds = { key ->
+                    MonthlyEdits.kinds(key?.let { MonthSport.valueOf(it) } ?: main).map { EditChoice(it.name, MonthlyEdits.label(it)) }
+                },
+                kindKey = MonthlyEdits.editableKind(editDay, startSport).name,
+                amount = when {
+                    editDay.isRest -> MonthlyEdits.defaultAmount(plan)
+                    byTime -> editDay.minutes.toDouble()
+                    else -> editDay.distanceM
+                },
+                range = { key, kind ->
+                    MonthlyEdits.range(plan, key?.let { MonthSport.valueOf(it) } ?: main, MonthKind.valueOf(kind))
+                },
+                moveTargets = MonthlyEdits.moveTargets(plan, editDate, today),
+                warnings = { key, kind, amount ->
+                    MonthlyEdits.setSession(plan, editDate, key?.let { MonthSport.valueOf(it) } ?: main, MonthKind.valueOf(kind), amount, today)
+                        ?.let { MonthlyEdits.warnings(it, editDate) }.orEmpty()
+                },
+            )
+        }
+        DayEditSheet(
+            model = model,
+            onSave = { key, kind, amount ->
+                MonthlyEdits.setSession(plan, editDate, key?.let { MonthSport.valueOf(it) } ?: main, MonthKind.valueOf(kind), amount, today)
+                    ?.let { ExtrasStore.setMonthly(it) }
+                editingDay = -1L
+            },
+            onRest = { MonthlyEdits.makeRest(plan, editDate, today)?.let { ExtrasStore.setMonthly(it) }; editingDay = -1L },
+            onMove = { to -> MonthlyEdits.move(plan, editDate, to, today)?.let { ExtrasStore.setMonthly(it) }; editingDay = -1L },
+            onReset = { ExtrasStore.setMonthly(MonthlyEdits.reset(plan, editDate)); editingDay = -1L },
+            onDismiss = { editingDay = -1L },
+        )
+    }
+    if (confirmResetAll) {
+        AlertDialog(
+            onDismissRequest = { confirmResetAll = false },
+            containerColor = MColors.Surface2,
+            title = { Text("Reset all your edits?", style = MType.Heading) },
+            text = { Text("Every edited day goes back to how Meridian planned it. Your activities stay.", style = MType.Body) },
+            confirmButton = {
+                TextButton(onClick = { ExtrasStore.setMonthly(MonthlyEdits.resetAll(plan)); confirmResetAll = false }) {
+                    Text("Reset", style = MType.Button.copy(color = MColors.Danger))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmResetAll = false }) { Text("Cancel", style = MType.Button.copy(color = MColors.Text)) }
+            },
+        )
+    }
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
@@ -676,6 +759,7 @@ private fun DayCard(
     eventTitle: String?,
     isToday: Boolean,
     onStartSession: () -> Unit,
+    onEdit: (() -> Unit)? = null,
 ) {
     SectionCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(20.dp)) {
@@ -689,6 +773,9 @@ private fun DayCard(
                     style = MType.Label.copy(color = MColors.Accent),
                     modifier = Modifier.weight(1f),
                 )
+                if (day.edited) {
+                    Text("EDITED", style = MType.Label, modifier = Modifier.padding(end = 10.dp))
+                }
                 statusText(status)?.let { (t, c) -> Text(t, style = MType.Label.copy(color = c)) }
             }
             Spacer(Modifier.height(6.dp))
@@ -725,6 +812,17 @@ private fun DayCard(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
+            }
+            if (onEdit != null) {
+                Spacer(Modifier.height(14.dp))
+                PillButton(
+                    if (day.isRest) "Add a session" else "Edit this day",
+                    icon = if (day.isRest) MIcons.Plus else MIcons.Edit,
+                    onClick = onEdit,
+                    filled = false,
+                    modifier = Modifier.fillMaxWidth(),
+                    height = 52.dp,
+                )
             }
         }
     }

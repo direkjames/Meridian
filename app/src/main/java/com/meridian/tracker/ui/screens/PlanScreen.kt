@@ -57,6 +57,7 @@ import com.meridian.tracker.data.DayStatus
 import com.meridian.tracker.data.ExtrasStore
 import com.meridian.tracker.data.PlanConfig
 import com.meridian.tracker.data.PlanDay
+import com.meridian.tracker.data.PlanEdits
 import com.meridian.tracker.data.PlanGenerator
 import com.meridian.tracker.data.PlanMode
 import com.meridian.tracker.data.SessionKind
@@ -410,6 +411,9 @@ private fun PlanView(plan: TrainingPlan, onStartSession: () -> Unit, onNewPlan: 
     val daysLeft = ChronoUnit.DAYS.between(today, cfg.eventDate)
     var confirmDelete by remember { mutableStateOf(false) }
     var editTime by remember { mutableStateOf(false) }
+    var confirmResetAll by remember { mutableStateOf(false) }
+    // The day open in the editor (epoch day), or -1.
+    var editingDay by rememberSaveable(plan.id) { mutableLongStateOf(-1L) }
 
     // Plan finished: award the badge when most sessions and the event itself were done.
     LaunchedEffect(status) {
@@ -527,7 +531,12 @@ private fun PlanView(plan: TrainingPlan, onStartSession: () -> Unit, onNewPlan: 
                 Column {
                     weekDays.forEachIndexed { i, d ->
                         if (i > 0) HorizontalHairline()
-                        DayRow(plan, d, status[d.date] ?: DayStatus.UPCOMING, isToday = d.date == today)
+                        val st = status[d.date] ?: DayStatus.UPCOMING
+                        val canEdit = PlanEdits.canEdit(plan, d.date, today) && st != DayStatus.DONE
+                        DayRow(
+                            plan, d, st, isToday = d.date == today,
+                            onClick = if (canEdit) ({ editingDay = d.date.toEpochDay() }) else null,
+                        )
                     }
                 }
             }
@@ -538,6 +547,16 @@ private fun PlanView(plan: TrainingPlan, onStartSession: () -> Unit, onNewPlan: 
             PillButton("Reminder ${planTimeLabel(cfg.reminderHour * 60 + cfg.reminderMinute)}", onClick = { editTime = true }, filled = false, modifier = Modifier.weight(1f), height = 52.dp)
             PillButton("Delete plan", onClick = { confirmDelete = true }, filled = false, modifier = Modifier.weight(1f), height = 52.dp)
         }
+        if (plan.originals.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
+            PillButton(
+                "Reset ${plan.originals.size} edited ${if (plan.originals.size == 1) "day" else "days"}",
+                onClick = { confirmResetAll = true },
+                filled = false,
+                modifier = Modifier.fillMaxWidth(),
+                height = 52.dp,
+            )
+        }
         if (daysLeft < 0) {
             Spacer(Modifier.height(10.dp))
             PillButton("Plan your next event", onClick = onNewPlan, modifier = Modifier.fillMaxWidth())
@@ -547,11 +566,68 @@ private fun PlanView(plan: TrainingPlan, onStartSession: () -> Unit, onNewPlan: 
 
     if (editTime) {
         PlanTimeDialog(cfg.reminderHour * 60 + cfg.reminderMinute, { minutes ->
-            ExtrasStore.setPlan(
-                PlanGenerator.generate(cfg.copy(reminderHour = minutes / 60, reminderMinute = minutes % 60), plan.id, plan.createdMs)
-            )
+            // Only the reminder changes: keep every day, including the ones you edited.
+            ExtrasStore.setPlan(plan.copy(config = cfg.copy(reminderHour = minutes / 60, reminderMinute = minutes % 60)))
             editTime = false
         }, { editTime = false })
+    }
+    val editDate = if (editingDay >= 0) LocalDate.ofEpochDay(editingDay) else null
+    // The day as shown (a missed long session may have been held back), so the editor starts from what you see.
+    val editDay = editDate?.let { d -> days.firstOrNull { it.date == d } }
+    if (editDate != null && editDay != null && PlanEdits.canEdit(plan, editDate, today)) {
+        val kinds = PlanEdits.kinds(cfg.mode)
+        val byTime = cfg.targetType == TargetType.TIME
+        val model = remember(plan, editDate) {
+            DayEditModel(
+                date = editDate,
+                title = editDay.title,
+                isRest = editDay.isRest,
+                edited = editDay.edited,
+                byTime = byTime,
+                sports = emptyList(),
+                sportKey = null,
+                kinds = { kinds.map { EditChoice(it.name, PlanEdits.label(it, cfg.mode)) } },
+                kindKey = (editDay.kind.takeIf { it in kinds } ?: kinds.first()).name,
+                amount = when {
+                    editDay.isRest -> PlanEdits.defaultAmount(plan)
+                    byTime -> editDay.minutes.toDouble()
+                    else -> editDay.distanceM
+                },
+                range = { _, _ -> PlanEdits.range(plan) },
+                moveTargets = PlanEdits.moveTargets(plan, editDate, today),
+                warnings = { _, kind, amount ->
+                    PlanEdits.setSession(plan, editDate, SessionKind.valueOf(kind), amount, today)
+                        ?.let { PlanEdits.warnings(it, editDate) }.orEmpty()
+                },
+            )
+        }
+        DayEditSheet(
+            model = model,
+            onSave = { _, kind, amount ->
+                PlanEdits.setSession(plan, editDate, SessionKind.valueOf(kind), amount, today)?.let { ExtrasStore.setPlan(it) }
+                editingDay = -1L
+            },
+            onRest = { PlanEdits.makeRest(plan, editDate, today)?.let { ExtrasStore.setPlan(it) }; editingDay = -1L },
+            onMove = { to -> PlanEdits.move(plan, editDate, to, today)?.let { ExtrasStore.setPlan(it) }; editingDay = -1L },
+            onReset = { ExtrasStore.setPlan(PlanEdits.reset(plan, editDate)); editingDay = -1L },
+            onDismiss = { editingDay = -1L },
+        )
+    }
+    if (confirmResetAll) {
+        AlertDialog(
+            onDismissRequest = { confirmResetAll = false },
+            containerColor = MColors.Surface2,
+            title = { Text("Reset all your edits?", style = MType.Heading) },
+            text = { Text("Every edited day goes back to how Meridian planned it. Your activities stay.", style = MType.Body) },
+            confirmButton = {
+                TextButton(onClick = { ExtrasStore.setPlan(PlanEdits.resetAll(plan)); confirmResetAll = false }) {
+                    Text("Reset", style = MType.Button.copy(color = MColors.Danger))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmResetAll = false }) { Text("Cancel", style = MType.Button.copy(color = MColors.Text)) }
+            },
+        )
     }
     if (confirmDelete) {
         AlertDialog(
@@ -572,11 +648,12 @@ private fun PlanView(plan: TrainingPlan, onStartSession: () -> Unit, onNewPlan: 
 }
 
 @Composable
-private fun DayRow(plan: TrainingPlan, day: PlanDay, status: DayStatus, isToday: Boolean) {
+private fun DayRow(plan: TrainingPlan, day: PlanDay, status: DayStatus, isToday: Boolean, onClick: (() -> Unit)? = null) {
     Row(
         Modifier
             .fillMaxWidth()
             .background(if (isToday) MColors.Accent.copy(alpha = 0.08f) else Color.Transparent)
+            .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClickLabel = "Edit this day", onClick = onClick) else Modifier)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -591,9 +668,17 @@ private fun DayRow(plan: TrainingPlan, day: PlanDay, status: DayStatus, isToday:
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (!day.isRest) Text(targetLabel(plan, day), style = MType.Label)
+            if (!day.isRest) {
+                Text(targetLabel(plan, day) + if (day.edited) " · EDITED" else "", style = MType.Label)
+            } else if (day.edited) {
+                Text("EDITED", style = MType.Label)
+            }
         }
         StatusMark(status, day.kind == SessionKind.RACE)
+        if (onClick != null) {
+            Spacer(Modifier.width(10.dp))
+            Icon(MIcons.Edit, contentDescription = "Edit", tint = MColors.Faint, modifier = Modifier.size(16.dp))
+        }
     }
 }
 

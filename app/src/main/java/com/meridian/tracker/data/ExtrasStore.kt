@@ -223,7 +223,30 @@ object ExtrasStore {
             .put("remH", c.reminderHour)
             .put("remM", c.reminderMinute)
             .put("nudge", c.eveningNudge)
+            // Days you edited. The rest of the plan is rebuilt from the settings above.
+            .put("edits", JSONArray().apply { PlanEdits.edits(p).forEach { put(planDayToJson(it)) } })
     }
+
+    private fun planDayToJson(d: PlanDay) = JSONObject()
+        .put("date", d.date.toString())
+        .put("kind", d.kind.name)
+        .put("m", d.distanceM)
+        .put("min", d.minutes)
+        .put("title", d.title)
+        .put("detail", d.detail)
+        .put("week", d.week)
+
+    private fun planDayFromJson(o: JSONObject): PlanDay? = runCatching {
+        PlanDay(
+            date = LocalDate.parse(o.getString("date")),
+            kind = SessionKind.valueOf(o.getString("kind")),
+            distanceM = o.getDouble("m"),
+            minutes = o.getInt("min"),
+            title = o.getString("title"),
+            detail = o.optString("detail", ""),
+            week = o.optInt("week", 0),
+        )
+    }.getOrNull()
 
     private fun planFromJson(o: JSONObject): TrainingPlan {
         val config = PlanConfig(
@@ -241,8 +264,10 @@ object ExtrasStore {
             reminderMinute = o.optInt("remM", 0),
             eveningNudge = o.optBoolean("nudge", true),
         )
-        // The plan is rebuilt from its settings, so it's always consistent.
-        return PlanGenerator.generate(config, o.getString("id"), o.getLong("created"))
+        // The plan is rebuilt from its settings, so it's always consistent; then your edits go back on.
+        val plan = PlanGenerator.generate(config, o.getString("id"), o.getLong("created"))
+        val edits = o.optJSONArray("edits")?.let { a -> List(a.length()) { planDayFromJson(a.getJSONObject(it)) } }.orEmpty().filterNotNull()
+        return PlanEdits.restore(plan, edits)
     }
 
     private fun monthlyToJson(p: MonthlyPlan): JSONObject {
@@ -268,22 +293,34 @@ object ExtrasStore {
             .put("seed", c.seed)
             .put("prevMin", c.prevTotalMin ?: JSONObject.NULL)
             // The days are saved as planned, so a later app update never reshuffles a month in progress.
-            .put("plan", JSONArray().apply {
-                p.days.forEach { d ->
-                    put(
-                        JSONObject()
-                            .put("date", d.date.toString())
-                            .put("sport", d.sport?.name ?: JSONObject.NULL)
-                            .put("kind", d.kind.name)
-                            .put("min", d.minutes)
-                            .put("m", d.distanceM)
-                            .put("title", d.title)
-                            .put("detail", d.detail)
-                            .put("week", d.week)
-                    )
-                }
-            })
+            .put("plan", JSONArray().apply { p.days.forEach { put(monthDayToJson(it)) } })
+            .put("originals", JSONArray().apply { p.originals.values.forEach { put(monthDayToJson(it)) } })
     }
+
+    private fun monthDayToJson(d: MonthDay) = JSONObject()
+        .put("date", d.date.toString())
+        .put("sport", d.sport?.name ?: JSONObject.NULL)
+        .put("kind", d.kind.name)
+        .put("min", d.minutes)
+        .put("m", d.distanceM)
+        .put("title", d.title)
+        .put("detail", d.detail)
+        .put("week", d.week)
+        .put("edited", d.edited)
+
+    private fun monthDayFromJson(d: JSONObject): MonthDay? = runCatching {
+        MonthDay(
+            date = LocalDate.parse(d.getString("date")),
+            sport = if (d.isNull("sport")) null else runCatching { MonthSport.valueOf(d.getString("sport")) }.getOrNull(),
+            kind = runCatching { MonthKind.valueOf(d.getString("kind")) }.getOrDefault(MonthKind.REST),
+            minutes = d.optInt("min", 0).coerceAtLeast(0),
+            distanceM = d.optDouble("m", 0.0).takeIf { !it.isNaN() && it >= 0 } ?: 0.0,
+            title = d.optString("title", "Session"),
+            detail = d.optString("detail", ""),
+            week = d.optInt("week", 0).coerceAtLeast(0),
+            edited = d.optBoolean("edited", false),
+        ).let { if (it.sport == null && it.kind != MonthKind.REST) it.copy(kind = MonthKind.REST, title = "Rest") else it }
+    }.getOrNull()
 
     private fun monthlyFromJson(o: JSONObject): MonthlyPlan {
         val sports = o.getJSONArray("sports").let { a -> List(a.length()) { a.getString(it) } }
@@ -315,25 +352,17 @@ object ExtrasStore {
         val id = o.getString("id")
         val created = o.optLong("created", 0L)
         val saved = o.optJSONArray("plan")?.let { a ->
-            List(a.length()) { i ->
-                runCatching {
-                    val d = a.getJSONObject(i)
-                    MonthDay(
-                        date = LocalDate.parse(d.getString("date")),
-                        sport = if (d.isNull("sport")) null else runCatching { MonthSport.valueOf(d.getString("sport")) }.getOrNull(),
-                        kind = runCatching { MonthKind.valueOf(d.getString("kind")) }.getOrDefault(MonthKind.REST),
-                        minutes = d.optInt("min", 0).coerceAtLeast(0),
-                        distanceM = d.optDouble("m", 0.0).takeIf { !it.isNaN() && it >= 0 } ?: 0.0,
-                        title = d.optString("title", "Session"),
-                        detail = d.optString("detail", ""),
-                        week = d.optInt("week", 0).coerceAtLeast(0),
-                    ).let { if (it.sport == null && it.kind != MonthKind.REST) it.copy(kind = MonthKind.REST, title = "Rest") else it }
-                }.getOrNull()
-            }.filterNotNull().distinctBy { it.date }.sortedBy { it.date }
+            List(a.length()) { i -> monthDayFromJson(a.getJSONObject(i)) }.filterNotNull().distinctBy { it.date }.sortedBy { it.date }
         }
         // Missing or damaged days: rebuild from the settings.
-        return if (saved.isNullOrEmpty()) MonthlyPlanner.generate(config, id, created)
-        else MonthlyPlan(id, config, saved, created, o.optInt("easyWeek", -1))
+        if (saved.isNullOrEmpty()) return MonthlyPlanner.generate(config, id, created)
+        val dates = saved.map { it.date }.toSet()
+        val originals = o.optJSONArray("originals")?.let { a ->
+            List(a.length()) { i -> monthDayFromJson(a.getJSONObject(i)) }.filterNotNull()
+        }.orEmpty().filter { it.date in dates }.associateBy { it.date }
+        // An "edited" day with no original to go back to is just a normal day.
+        val days = saved.map { if (it.edited && it.date !in originals) it.copy(edited = false) else it }
+        return MonthlyPlan(id, config, days, created, o.optInt("easyWeek", -1), originals)
     }
 
     private fun goalsToJson(goals: List<Goal>) = JSONArray().apply {
