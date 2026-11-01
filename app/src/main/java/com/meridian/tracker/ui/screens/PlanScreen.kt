@@ -255,7 +255,7 @@ private fun PlanSetup(onCancel: () -> Unit, onCreate: (TrainingPlan) -> Unit) {
         }
 
         PlanLabel("Event")
-        Field {
+        PlanField {
             BasicTextField(
                 value = name,
                 onValueChange = { if (it.length <= 40) name = it },
@@ -275,7 +275,7 @@ private fun PlanSetup(onCancel: () -> Unit, onCreate: (TrainingPlan) -> Unit) {
             }
         }
         Spacer(Modifier.height(8.dp))
-        Field {
+        PlanField {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Other distance", style = MType.Body, modifier = Modifier.weight(1f))
                 BasicTextField(
