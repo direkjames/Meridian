@@ -85,11 +85,20 @@ import java.time.temporal.ChronoUnit
 import java.util.Locale
 import java.util.UUID
 
-/** The Plan tab: create a training plan for an event, then follow it day by day. */
+/**
+ * The Plan tab: an event plan (train for a fun run or race) and a monthly plan (a month of mixed
+ * sessions), kept separate so you can follow either or both.
+ */
 @Composable
 fun PlanScreen(onStartSession: () -> Unit) {
     val plan by ExtrasStore.plan.collectAsStateWithLifecycle()
+    val monthly by ExtrasStore.monthly.collectAsStateWithLifecycle()
     var editing by rememberSaveable { mutableStateOf(false) }
+    var monthlySetup by rememberSaveable { mutableStateOf(false) }
+    // -1 until you pick: then open whichever plan you have (event first).
+    var tab by rememberSaveable { mutableIntStateOf(-1) }
+    val selected = if (tab >= 0) tab else if (plan == null && monthly != null) 1 else 0
+    val inSetup = if (selected == 0) editing else monthlySetup
 
     Box(
         Modifier
@@ -97,14 +106,39 @@ fun PlanScreen(onStartSession: () -> Unit) {
             .background(MColors.Bg)
             .statusBarsPadding()
     ) {
-        val current = plan
-        when {
-            editing -> PlanSetup(
-                onCancel = { editing = false },
-                onCreate = { ExtrasStore.setPlan(it); editing = false },
-            )
-            current == null -> PlanIntro(onCreate = { editing = true })
-            else -> PlanView(current, onStartSession = onStartSession, onNewPlan = { editing = true })
+        Column(Modifier.fillMaxSize()) {
+            if (!inSetup) {
+                Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 10.dp)) {
+                    Text("Plan", style = MType.Title.copy(fontSize = MType.Title.fontSize * 1.15f), modifier = Modifier.padding(start = 8.dp, top = 8.dp))
+                    Spacer(Modifier.height(14.dp))
+                    Segmented(listOf("Event", "Monthly"), selected, { tab = it }, Modifier.fillMaxWidth())
+                }
+            }
+            Box(
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) {
+                val current = plan
+                if (selected == 0) {
+                    when {
+                        editing -> PlanSetup(
+                            onCancel = { editing = false },
+                            onCreate = { ExtrasStore.setPlan(it); editing = false },
+                        )
+                        current == null -> PlanIntro(onCreate = { editing = true })
+                        else -> PlanView(current, onStartSession = onStartSession, onNewPlan = { editing = true })
+                    }
+                } else {
+                    MonthlyPlanTab(
+                        plan = monthly,
+                        eventPlan = current,
+                        setup = monthlySetup,
+                        onSetup = { monthlySetup = it },
+                        onStartSession = onStartSession,
+                    )
+                }
+            }
         }
     }
 }
@@ -121,8 +155,7 @@ private fun PlanIntro(onCreate: () -> Unit) {
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp, vertical = 18.dp),
     ) {
-        Text("Plan", style = MType.Title.copy(fontSize = MType.Title.fontSize * 1.15f))
-        Spacer(Modifier.height(40.dp))
+        Spacer(Modifier.height(22.dp))
         Text("Train for your\nnext event.", style = MType.Hero.copy(fontSize = MType.Hero.fontSize * 0.55f, lineHeight = MType.Hero.lineHeight * 0.6f))
         Spacer(Modifier.height(16.dp))
         Text(
@@ -218,7 +251,7 @@ private fun PlanSetup(onCancel: () -> Unit, onCreate: (TrainingPlan) -> Unit) {
             Text("New plan", style = MType.Title)
         }
 
-        Label("Event")
+        PlanLabel("Event")
         Field {
             BasicTextField(
                 value = name,
@@ -232,7 +265,7 @@ private fun PlanSetup(onCancel: () -> Unit, onCreate: (TrainingPlan) -> Unit) {
         Spacer(Modifier.height(10.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             EVENT_DISTANCES.forEach { (m, label) ->
-                Chip(label, selected = customKm.isBlank() && eventM == m, modifier = Modifier.weight(1f)) {
+                PlanChip(label, selected = customKm.isBlank() && eventM == m, modifier = Modifier.weight(1f)) {
                     eventM = m
                     customKm = ""
                 }
@@ -255,7 +288,7 @@ private fun PlanSetup(onCancel: () -> Unit, onCreate: (TrainingPlan) -> Unit) {
             }
         }
 
-        Label("How you'll do it")
+        PlanLabel("How you'll do it")
         Segmented(PlanMode.entries.map { it.label }, mode.ordinal, { modeName = PlanMode.entries[it].name }, Modifier.fillMaxWidth())
         Text(
             when (mode) {
@@ -270,29 +303,29 @@ private fun PlanSetup(onCancel: () -> Unit, onCreate: (TrainingPlan) -> Unit) {
             targetName = if (it == 1) TargetType.TIME.name else TargetType.DISTANCE.name
         }, Modifier.fillMaxWidth())
 
-        Label("Dates")
+        PlanLabel("Dates")
         SectionCard(Modifier.fillMaxWidth()) {
             Column {
-                SettingRow("Start training", dateLabel(config.startDate)) { pickStart = true }
+                PlanSettingRow("Start training", planDateLabel(config.startDate)) { pickStart = true }
                 HorizontalHairline()
-                SettingRow("Event day", dateLabel(config.eventDate)) { pickEvent = true }
+                PlanSettingRow("Event day", planDateLabel(config.eventDate)) { pickEvent = true }
             }
         }
 
-        Label("Your week")
+        PlanLabel("Your week")
         Segmented(listOf("3 days", "4 days", "5 days", "6 days"), daysPerWeek - 3, { daysPerWeek = it + 3 }, Modifier.fillMaxWidth())
         Spacer(Modifier.height(10.dp))
         Text("Longest session on", style = MType.Body, modifier = Modifier.padding(horizontal = 8.dp))
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             DayOfWeek.entries.forEach { d ->
-                Chip(d.getDisplayName(TextStyle.SHORT, Locale.getDefault()).take(3), selected = d.value == longDayValue, modifier = Modifier.weight(1f)) {
+                PlanChip(d.getDisplayName(TextStyle.SHORT, Locale.getDefault()).take(3), selected = d.value == longDayValue, modifier = Modifier.weight(1f)) {
                     longDayValue = d.value
                 }
             }
         }
 
-        Label("Where you're starting")
+        PlanLabel("Where you're starting")
         SectionCard(Modifier.fillMaxWidth()) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -309,27 +342,27 @@ private fun PlanSetup(onCancel: () -> Unit, onCreate: (TrainingPlan) -> Unit) {
             }
         }
 
-        Label("Reminders")
+        PlanLabel("Reminders")
         SectionCard(Modifier.fillMaxWidth()) {
             Column {
-                SettingRow("Morning reminder", timeLabel(reminderMin)) { pickTime = true }
+                PlanSettingRow("Morning reminder", planTimeLabel(reminderMin)) { pickTime = true }
                 HorizontalHairline()
-                SettingRow("Evening nudge at 7 PM", if (nudge) "On" else "Off", accent = nudge) { nudge = !nudge }
+                PlanSettingRow("Evening nudge at 7 PM", if (nudge) "On" else "Off", accent = nudge) { nudge = !nudge }
             }
         }
 
         Spacer(Modifier.height(22.dp))
         if (!valid) {
-            Note("Pick an event day at least a week after you start.", warn = true)
+            PlanNote("Pick an event day at least a week after you start.", warn = true)
         } else if (preview != null) {
-            Note(
+            PlanNote(
                 "${preview.weeks} weeks · ${preview.sessions.size} sessions · longest before the event: " +
                     "${Format.dist1(preview.longestM)} ${Format.distUnit}",
                 warn = false,
             )
             if (preview.compressed) {
                 Spacer(Modifier.height(8.dp))
-                Note(
+                PlanNote(
                     "That's a short runway for this distance (ideally ${PlanGenerator.minWeeks(effectiveEventM)}+ weeks). " +
                         "The plan still works, but consider walking more of the event and taking it easy.",
                     warn = true,
@@ -356,9 +389,9 @@ private fun PlanSetup(onCancel: () -> Unit, onCreate: (TrainingPlan) -> Unit) {
         Spacer(Modifier.height(28.dp))
     }
 
-    if (pickStart) DateDialog(config.startDate, { startDay = it.toEpochDay(); pickStart = false }, { pickStart = false })
-    if (pickEvent) DateDialog(config.eventDate, { eventDay = it.toEpochDay(); pickEvent = false }, { pickEvent = false })
-    if (pickTime) TimeDialog(reminderMin, { reminderMin = it; pickTime = false }, { pickTime = false })
+    if (pickStart) PlanDateDialog(config.startDate, { startDay = it.toEpochDay(); pickStart = false }, { pickStart = false })
+    if (pickEvent) PlanDateDialog(config.eventDate, { eventDay = it.toEpochDay(); pickEvent = false }, { pickEvent = false })
+    if (pickTime) PlanTimeDialog(reminderMin, { reminderMin = it; pickTime = false }, { pickTime = false })
 }
 
 // =================================================================================================
@@ -390,8 +423,7 @@ private fun PlanView(plan: TrainingPlan, onStartSession: () -> Unit, onNewPlan: 
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp, vertical = 10.dp),
     ) {
-        Text("Plan", style = MType.Title.copy(fontSize = MType.Title.fontSize * 1.15f), modifier = Modifier.padding(start = 8.dp, top = 8.dp))
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(4.dp))
 
         // Hero
         Column(
@@ -402,7 +434,7 @@ private fun PlanView(plan: TrainingPlan, onStartSession: () -> Unit, onNewPlan: 
                 .padding(22.dp)
         ) {
             Text(
-                "${cfg.mode.label.uppercase()} · ${Format.dist1(cfg.eventDistanceM)} ${Format.distUnit.uppercase()} · ${dateLabel(cfg.eventDate).uppercase()}",
+                "${cfg.mode.label.uppercase()} · ${Format.dist1(cfg.eventDistanceM)} ${Format.distUnit.uppercase()} · ${planDateLabel(cfg.eventDate).uppercase()}",
                 style = MType.Label.copy(color = MColors.OnAccent.copy(alpha = 0.75f)),
             )
             Spacer(Modifier.height(6.dp))
@@ -487,7 +519,7 @@ private fun PlanView(plan: TrainingPlan, onStartSession: () -> Unit, onNewPlan: 
             val first = weekDays.first().date
             val isPast = weekDays.last().date.isBefore(today)
             Text(
-                "WEEK ${week + 1} · ${dateShort(first).uppercase()}" + if (weekDays.any { it.detail.contains("Recovery week") }) " · LIGHTER WEEK" else "",
+                "WEEK ${week + 1} · ${planDateShort(first).uppercase()}" + if (weekDays.any { it.detail.contains("Recovery week") }) " · LIGHTER WEEK" else "",
                 style = MType.Label,
                 modifier = Modifier.padding(start = 8.dp, top = 26.dp, bottom = 10.dp),
             )
@@ -503,7 +535,7 @@ private fun PlanView(plan: TrainingPlan, onStartSession: () -> Unit, onNewPlan: 
 
         Spacer(Modifier.height(24.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            PillButton("Reminder ${timeLabel(cfg.reminderHour * 60 + cfg.reminderMinute)}", onClick = { editTime = true }, filled = false, modifier = Modifier.weight(1f), height = 52.dp)
+            PillButton("Reminder ${planTimeLabel(cfg.reminderHour * 60 + cfg.reminderMinute)}", onClick = { editTime = true }, filled = false, modifier = Modifier.weight(1f), height = 52.dp)
             PillButton("Delete plan", onClick = { confirmDelete = true }, filled = false, modifier = Modifier.weight(1f), height = 52.dp)
         }
         if (daysLeft < 0) {
@@ -514,7 +546,7 @@ private fun PlanView(plan: TrainingPlan, onStartSession: () -> Unit, onNewPlan: 
     }
 
     if (editTime) {
-        TimeDialog(cfg.reminderHour * 60 + cfg.reminderMinute, { minutes ->
+        PlanTimeDialog(cfg.reminderHour * 60 + cfg.reminderMinute, { minutes ->
             ExtrasStore.setPlan(
                 PlanGenerator.generate(cfg.copy(reminderHour = minutes / 60, reminderMinute = minutes % 60), plan.id, plan.createdMs)
             )
@@ -595,12 +627,12 @@ private fun targetLabel(plan: TrainingPlan, day: PlanDay): String =
     if (plan.config.targetType == TargetType.TIME) "${day.minutes} min" else "${Format.km(day.distanceM)} ${Format.distUnit}"
 
 @Composable
-private fun Label(text: String) {
+internal fun PlanLabel(text: String) {
     Text(text.uppercase(), style = MType.Label, modifier = Modifier.padding(start = 8.dp, top = 24.dp, bottom = 10.dp))
 }
 
 @Composable
-private fun Field(content: @Composable () -> Unit) {
+internal fun PlanField(content: @Composable () -> Unit) {
     Box(
         Modifier
             .fillMaxWidth()
@@ -612,7 +644,7 @@ private fun Field(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun Chip(label: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+internal fun PlanChip(label: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Box(
         modifier
             .height(40.dp)
@@ -627,7 +659,7 @@ private fun Chip(label: String, selected: Boolean, modifier: Modifier = Modifier
 }
 
 @Composable
-private fun SettingRow(title: String, value: String, accent: Boolean = true, onClick: () -> Unit) {
+internal fun PlanSettingRow(title: String, value: String, accent: Boolean = true, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -641,7 +673,7 @@ private fun SettingRow(title: String, value: String, accent: Boolean = true, onC
 }
 
 @Composable
-private fun Note(text: String, warn: Boolean) {
+internal fun PlanNote(text: String, warn: Boolean) {
     Text(
         text,
         style = MType.Body.copy(fontSize = MType.Body.fontSize * 0.9f, color = if (warn) MColors.Danger else MColors.Text),
@@ -655,7 +687,7 @@ private fun Note(text: String, warn: Boolean) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DateDialog(initial: LocalDate, onPick: (LocalDate) -> Unit, onDismiss: () -> Unit) {
+internal fun PlanDateDialog(initial: LocalDate, onPick: (LocalDate) -> Unit, onDismiss: () -> Unit) {
     val state = rememberDatePickerState(initialSelectedDateMillis = initial.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli())
     DatePickerDialog(
         onDismissRequest = onDismiss,
@@ -672,7 +704,7 @@ private fun DateDialog(initial: LocalDate, onPick: (LocalDate) -> Unit, onDismis
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TimeDialog(initialMinutes: Int, onPick: (Int) -> Unit, onDismiss: () -> Unit) {
+internal fun PlanTimeDialog(initialMinutes: Int, onPick: (Int) -> Unit, onDismiss: () -> Unit) {
     val state = rememberTimePickerState(initialHour = initialMinutes / 60, initialMinute = initialMinutes % 60, is24Hour = false)
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -689,6 +721,6 @@ private fun TimeDialog(initialMinutes: Int, onPick: (Int) -> Unit, onDismiss: ()
 private val dateFmt = DateTimeFormatter.ofPattern("EEE, MMM d", Locale.getDefault())
 private val shortFmt = DateTimeFormatter.ofPattern("MMM d", Locale.getDefault())
 private val timeFmt = DateTimeFormatter.ofPattern("h:mm a", Locale.getDefault())
-private fun dateLabel(d: LocalDate) = d.format(dateFmt)
-private fun dateShort(d: LocalDate) = d.format(shortFmt)
-private fun timeLabel(minutes: Int) = LocalTime.of(minutes / 60, minutes % 60).format(timeFmt)
+internal fun planDateLabel(d: LocalDate) = d.format(dateFmt)
+internal fun planDateShort(d: LocalDate) = d.format(shortFmt)
+internal fun planTimeLabel(minutes: Int) = LocalTime.of(minutes / 60, minutes % 60).format(timeFmt)
