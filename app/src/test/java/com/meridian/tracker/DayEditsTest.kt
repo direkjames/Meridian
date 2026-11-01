@@ -303,6 +303,24 @@ class DayEditsTest {
     }
 
     @Test
+    fun makingSessionsRestDoesNotMakeThePlanEasierToComplete() {
+        val ep = eventPlan()
+        val today = start
+        val gone = ep.sessions.filter { it.kind != SessionKind.RACE }.take(5).fold(ep) { acc, d -> PlanEdits.makeRest(acc, d.date, today)!! }
+        assertEquals(ep.sessions.size, PlanGenerator.completion(gone, emptyMap()).second)
+        val mp = monthPlan()
+        val mt = LocalDate.of(2026, 11, 1)
+        val mgone = mp.sessions.take(5).fold(mp) { acc, d -> MonthlyEdits.makeRest(acc, d.date, mt)!! }
+        assertEquals(mp.sessions.size, MonthlyPlanner.completion(mgone, emptyMap()).second)
+        // Adding sessions raises the total; moving doesn't change it.
+        val rest = mp.days.first { it.isRest }
+        val added = MonthlyEdits.setSession(mp, rest.date, MonthSport.WALK, MonthKind.EASY, 3_000.0, mt)!!
+        assertEquals(mp.sessions.size + 1, MonthlyPlanner.completion(added, emptyMap()).second)
+        val moved = MonthlyEdits.move(mp, mp.sessions.first().date, rest.date, mt)!!
+        assertEquals(mp.sessions.size, MonthlyPlanner.completion(moved, emptyMap()).second)
+    }
+
+    @Test
     fun kindsPerSportAreSensible() {
         MonthSport.entries.forEach { s ->
             val k = MonthlyEdits.kinds(s)

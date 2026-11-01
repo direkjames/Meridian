@@ -477,6 +477,8 @@ object MonthlyPlanner {
 
     fun completion(plan: MonthlyPlan, status: Map<LocalDate, DayStatus>): Pair<Int, Int> {
         val sessions = plan.sessions
-        return sessions.count { status[it.date] == DayStatus.DONE } to sessions.size
+        // Turning sessions into rest days doesn't shrink the total below what was first planned.
+        val planned = plan.days.count { !(plan.originals[it.date] ?: it).isRest }
+        return sessions.count { status[it.date] == DayStatus.DONE } to max(sessions.size, planned)
     }
 }

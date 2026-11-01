@@ -312,6 +312,9 @@ object PlanGenerator {
 
     fun completion(plan: TrainingPlan, status: Map<LocalDate, DayStatus>): Pair<Int, Int> {
         val sessions = plan.sessions
-        return sessions.count { status[it.date] == DayStatus.DONE } to sessions.size
+        // Turning sessions into rest days doesn't make the plan easier to finish: the total never
+        // drops below what Meridian first planned.
+        val planned = plan.days.count { !(plan.originals[it.date] ?: it).isRest }
+        return sessions.count { status[it.date] == DayStatus.DONE } to max(sessions.size, planned)
     }
 }
