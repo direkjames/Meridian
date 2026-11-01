@@ -37,12 +37,17 @@ object ExtrasStore {
     private const val ROUTES = "routes.json"
     private const val SEEN = "badges_seen.json"
     private const val GEAR = "gear.json"
-    val FILES = listOf(PLAN, GOALS, ROUTES, SEEN, GEAR)
+    private const val MONTHLY = "monthly.json"
+    val FILES = listOf(PLAN, GOALS, ROUTES, SEEN, GEAR, MONTHLY)
 
     private lateinit var dir: File
 
     private val _plan = MutableStateFlow<TrainingPlan?>(null)
     val plan: StateFlow<TrainingPlan?> = _plan.asStateFlow()
+
+    private val _monthly = MutableStateFlow<MonthlyPlan?>(null)
+    /** The monthly plan, kept apart from the event plan so you can follow both. */
+    val monthly: StateFlow<MonthlyPlan?> = _monthly.asStateFlow()
 
     private val _goals = MutableStateFlow<List<Goal>>(emptyList())
     val goals: StateFlow<List<Goal>> = _goals.asStateFlow()
@@ -72,6 +77,7 @@ object ExtrasStore {
     /** Re-reads everything from disk (also used after a restore). */
     fun reload() {
         _plan.value = read(PLAN)?.let { runCatching { planFromJson(JSONObject(it)) }.getOrNull() }
+        _monthly.value = read(MONTHLY)?.let { runCatching { monthlyFromJson(JSONObject(it)) }.getOrNull() }
         _goals.value = read(GOALS)?.let { runCatching { goalsFromJson(JSONArray(it)) }.getOrNull() }.orEmpty()
         _routes.value = read(ROUTES)?.let { runCatching { routesFromJson(JSONArray(it)) }.getOrNull() }.orEmpty()
         _gear.value = read(GEAR)?.let { runCatching { gearFromJson(JSONArray(it)) }.getOrNull() }.orEmpty()
@@ -90,6 +96,12 @@ object ExtrasStore {
     fun setPlan(plan: TrainingPlan?) {
         _plan.value = plan
         if (plan == null) File(dir, PLAN).delete() else write(PLAN, planToJson(plan).toString())
+        changed()
+    }
+
+    fun setMonthly(plan: MonthlyPlan?) {
+        _monthly.value = plan
+        if (plan == null) File(dir, MONTHLY).delete() else write(MONTHLY, monthlyToJson(plan).toString())
         changed()
     }
 
@@ -167,6 +179,7 @@ object ExtrasStore {
     /** Restores files that are missing here; goals and routes are merged by id. */
     fun importFiles(files: Map<String, String>) {
         files[PLAN]?.let { if (_plan.value == null) write(PLAN, it) }
+        files[MONTHLY]?.let { if (_monthly.value == null) write(MONTHLY, it) }
         files[GOALS]?.let { text ->
             runCatching { goalsFromJson(JSONArray(text)) }.getOrNull()?.let { incoming ->
                 val merged = (_goals.value + incoming.filter { g -> _goals.value.none { it.id == g.id } })
@@ -230,6 +243,97 @@ object ExtrasStore {
         )
         // The plan is rebuilt from its settings, so it's always consistent.
         return PlanGenerator.generate(config, o.getString("id"), o.getLong("created"))
+    }
+
+    private fun monthlyToJson(p: MonthlyPlan): JSONObject {
+        val c = p.config
+        return JSONObject()
+            .put("v", 1)
+            .put("id", p.id)
+            .put("created", p.createdMs)
+            .put("easyWeek", p.easyWeek)
+            .put("start", c.startDate.toString())
+            .put("end", c.endDate.toString())
+            .put("goal", c.goal.name)
+            .put("theme", c.theme.name)
+            .put("sports", JSONArray(c.sports.map { it.name }))
+            .put("days", c.daysPerWeek)
+            .put("free", JSONArray(c.freeDays.map { it.value }))
+            .put("longDay", c.longDay.value)
+            .put("target", c.targetType.name)
+            .put("weeklyMin", c.weeklyMinutes)
+            .put("monthTarget", c.monthTarget ?: JSONObject.NULL)
+            .put("paces", JSONObject().apply { c.paces.forEach { (k, v) -> put(k.name, v) } })
+            .put("index", c.monthIndex)
+            .put("seed", c.seed)
+            .put("prevMin", c.prevTotalMin ?: JSONObject.NULL)
+            // The days are saved as planned, so a later app update never reshuffles a month in progress.
+            .put("plan", JSONArray().apply {
+                p.days.forEach { d ->
+                    put(
+                        JSONObject()
+                            .put("date", d.date.toString())
+                            .put("sport", d.sport?.name ?: JSONObject.NULL)
+                            .put("kind", d.kind.name)
+                            .put("min", d.minutes)
+                            .put("m", d.distanceM)
+                            .put("title", d.title)
+                            .put("detail", d.detail)
+                            .put("week", d.week)
+                    )
+                }
+            })
+    }
+
+    private fun monthlyFromJson(o: JSONObject): MonthlyPlan {
+        val sports = o.getJSONArray("sports").let { a -> List(a.length()) { a.getString(it) } }
+            .mapNotNull { runCatching { MonthSport.valueOf(it) }.getOrNull() }
+            .ifEmpty { listOf(MonthSport.WALK) }
+        val free = o.optJSONArray("free")?.let { a -> List(a.length()) { a.getInt(it) } }
+            ?.filter { it in 1..7 }?.map { DayOfWeek.of(it) }?.toSet().orEmpty()
+        val paces = o.optJSONObject("paces")?.let { p ->
+            MonthSport.entries.filter { p.has(it.name) }.associateWith { p.getDouble(it.name) }
+        }.orEmpty()
+        val goal = runCatching { MonthGoal.valueOf(o.getString("goal")) }.getOrDefault(MonthGoal.FITTER)
+        val config = MonthConfig(
+            startDate = LocalDate.parse(o.getString("start")),
+            endDate = LocalDate.parse(o.getString("end")),
+            goal = goal,
+            theme = runCatching { MonthTheme.valueOf(o.getString("theme")) }.getOrDefault(MonthTheme.BASE),
+            sports = sports,
+            daysPerWeek = o.getInt("days").coerceIn(1, 6),
+            freeDays = free,
+            longDay = DayOfWeek.of(o.optInt("longDay", 7).coerceIn(1, 7)),
+            targetType = runCatching { TargetType.valueOf(o.getString("target")) }.getOrDefault(TargetType.DISTANCE),
+            weeklyMinutes = o.getDouble("weeklyMin"),
+            monthTarget = if (o.isNull("monthTarget")) null else o.optDouble("monthTarget").takeIf { !it.isNaN() && it > 0 },
+            paces = paces,
+            monthIndex = o.optInt("index", 0),
+            seed = o.optLong("seed", 0L),
+            prevTotalMin = if (o.isNull("prevMin")) null else o.optDouble("prevMin").takeIf { !it.isNaN() && it > 0 },
+        )
+        val id = o.getString("id")
+        val created = o.optLong("created", 0L)
+        val saved = o.optJSONArray("plan")?.let { a ->
+            List(a.length()) { i ->
+                runCatching {
+                    val d = a.getJSONObject(i)
+                    MonthDay(
+                        date = LocalDate.parse(d.getString("date")),
+                        sport = if (d.isNull("sport")) null else runCatching { MonthSport.valueOf(d.getString("sport")) }.getOrNull(),
+                        kind = runCatching { MonthKind.valueOf(d.getString("kind")) }.getOrDefault(MonthKind.REST),
+                        minutes = d.optInt("min", 0).coerceAtLeast(0),
+                        distanceM = d.optDouble("m", 0.0).takeIf { !it.isNaN() && it >= 0 } ?: 0.0,
+                        title = d.optString("title", "Session"),
+                        detail = d.optString("detail", ""),
+                        week = d.optInt("week", 0).coerceAtLeast(0),
+                    ).let { if (it.sport == null && it.kind != MonthKind.REST) it.copy(kind = MonthKind.REST, title = "Rest") else it }
+                }.getOrNull()
+            }.filterNotNull().distinctBy { it.date }.sortedBy { it.date }
+        }
+        // Missing or damaged days: rebuild from the settings.
+        return if (saved.isNullOrEmpty()) MonthlyPlanner.generate(config, id, created)
+        else MonthlyPlan(id, config, saved, created, o.optInt("easyWeek", -1))
     }
 
     private fun goalsToJson(goals: List<Goal>) = JSONArray().apply {
