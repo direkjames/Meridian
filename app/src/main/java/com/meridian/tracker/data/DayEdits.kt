@@ -259,7 +259,7 @@ object MonthlyEdits {
             dist = MonthlyPlanner.roundTo(a, 100.0).coerceAtLeast(EditLimits.MIN_DISTANCE_M)
         }
         val (title, detail) = MonthlyPlanner.describe(cfg, sport, k, minutes, cur.week, date.dayOfMonth)
-        return put(plan, listOf(MonthDay(date, sport, k, minutes, dist, title, detail, cur.week)))
+        return put(plan, listOf(MonthDay(date, sport, k, minutes, dist, title, detail, cur.week, catchUpOf = cur.catchUpOf)))
     }
 
     fun makeRest(plan: MonthlyPlan, date: LocalDate, today: LocalDate): MonthlyPlan? {
@@ -286,9 +286,9 @@ object MonthlyEdits {
     }
 
     fun resetAll(plan: MonthlyPlan): MonthlyPlan =
-        plan.copy(days = plan.days.map { plan.originals[it.date] ?: it }, originals = emptyMap())
+        plan.copy(days = plan.days.map { plan.originals[it.date] ?: it }, originals = emptyMap(), dismissed = emptySet())
 
-    private fun put(plan: MonthlyPlan, changes: List<MonthDay>): MonthlyPlan {
+    internal fun put(plan: MonthlyPlan, changes: List<MonthDay>): MonthlyPlan {
         val byDate = changes.associateBy { it.date }
         val originals = plan.originals.toMutableMap()
         plan.days.forEach { d -> if (d.date in byDate && d.date !in originals) originals[d.date] = d }

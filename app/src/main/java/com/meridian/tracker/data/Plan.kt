@@ -70,7 +70,8 @@ data class TrainingPlan(
     val weeks: Int get() = (days.maxOfOrNull { it.week } ?: 0) + 1
 }
 
-enum class DayStatus { DONE, PARTIAL, MISSED, TODAY, UPCOMING, REST }
+/** [MOVED]: a missed session you rescheduled to another day (see [MonthlyCatchUp]). */
+enum class DayStatus { DONE, PARTIAL, MISSED, TODAY, UPCOMING, REST, MOVED }
 
 /**
  * Builds a periodised plan, base → build (with a lighter week every 4th week) → taper → event,

@@ -131,6 +131,8 @@ data class MonthDay(
     val week: Int,
     /** True when you changed this day yourself (see [MonthlyEdits]). */
     val edited: Boolean = false,
+    /** Set when this session is a catch-up for a missed one on that date (see [MonthlyCatchUp]). */
+    val catchUpOf: LocalDate? = null,
 ) {
     val isRest: Boolean get() = kind == MonthKind.REST
 }
@@ -144,9 +146,15 @@ data class MonthlyPlan(
     val easyWeek: Int,
     /** For every day you edited: how it was first planned, so it can be reset. */
     val originals: Map<LocalDate, MonthDay> = emptyMap(),
+    /** Suggestions you said no to: a missed session's date, or the first day of a week (see [MonthlyCatchUp]). */
+    val dismissed: Set<LocalDate> = emptySet(),
 ) {
     fun day(date: LocalDate): MonthDay? = days.firstOrNull { it.date == date }
-    val sessions: List<MonthDay> get() = days.filterNot { it.isRest }
+
+    /** Missed sessions that now have a catch-up scheduled: they no longer count as planned. */
+    val movedAway: Set<LocalDate> get() = days.filter { !it.isRest }.mapNotNull { it.catchUpOf }.toSet()
+
+    val sessions: List<MonthDay> get() = days.filter { !it.isRest && it.date !in movedAway }
     val totalMinutes: Int get() = sessions.sumOf { it.minutes }
     val totalM: Double get() = sessions.sumOf { it.distanceM }
     val weeks: Int get() = (days.maxOfOrNull { it.week } ?: 0) + 1
@@ -447,8 +455,9 @@ object MonthlyPlanner {
         zone: ZoneId = ZoneId.systemDefault(),
     ): Map<LocalDate, DayStatus> {
         val byDay = records.groupBy { Stats.localDate(it.startTimeMs, zone) }
+        val moved = plan.movedAway
         return plan.days.associate { day ->
-            day.date to if (day.isRest || day.sport == null) DayStatus.REST else {
+            day.date to if (day.isRest || day.sport == null) DayStatus.REST else if (day.date in moved) DayStatus.MOVED else {
                 val done = byDay[day.date].orEmpty().filter { day.sport.counts(it.sport) }
                 val r = ratio(plan, day, done)
                 when {
@@ -465,7 +474,8 @@ object MonthlyPlanner {
     /** 0 = nothing yet, 1 = the full session, for the calendar rings. */
     fun progress(plan: MonthlyPlan, records: List<ActivityRecord>, zone: ZoneId = ZoneId.systemDefault()): Map<LocalDate, Float> {
         val byDay = records.groupBy { Stats.localDate(it.startTimeMs, zone) }
-        return plan.days.filter { !it.isRest && it.sport != null }.associate { day ->
+        val moved = plan.movedAway
+        return plan.days.filter { !it.isRest && it.sport != null && it.date !in moved }.associate { day ->
             day.date to ratio(plan, day, byDay[day.date].orEmpty().filter { day.sport!!.counts(it.sport) }).toFloat().coerceIn(0f, 1f)
         }
     }

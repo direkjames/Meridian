@@ -295,6 +295,7 @@ object ExtrasStore {
             // The days are saved as planned, so a later app update never reshuffles a month in progress.
             .put("plan", JSONArray().apply { p.days.forEach { put(monthDayToJson(it)) } })
             .put("originals", JSONArray().apply { p.originals.values.forEach { put(monthDayToJson(it)) } })
+            .put("dismissed", JSONArray(p.dismissed.map { it.toString() }))
     }
 
     private fun monthDayToJson(d: MonthDay) = JSONObject()
@@ -307,6 +308,7 @@ object ExtrasStore {
         .put("detail", d.detail)
         .put("week", d.week)
         .put("edited", d.edited)
+        .put("catchUp", d.catchUpOf?.toString() ?: JSONObject.NULL)
 
     private fun monthDayFromJson(d: JSONObject): MonthDay? = runCatching {
         MonthDay(
@@ -319,6 +321,7 @@ object ExtrasStore {
             detail = d.optString("detail", ""),
             week = d.optInt("week", 0).coerceAtLeast(0),
             edited = d.optBoolean("edited", false),
+            catchUpOf = if (d.isNull("catchUp")) null else runCatching { LocalDate.parse(d.getString("catchUp")) }.getOrNull(),
         ).let { if (it.sport == null && it.kind != MonthKind.REST) it.copy(kind = MonthKind.REST, title = "Rest") else it }
     }.getOrNull()
 
@@ -362,7 +365,10 @@ object ExtrasStore {
         }.orEmpty().filter { it.date in dates }.associateBy { it.date }
         // An "edited" day with no original to go back to is just a normal day.
         val days = saved.map { if (it.edited && it.date !in originals) it.copy(edited = false) else it }
-        return MonthlyPlan(id, config, days, created, o.optInt("easyWeek", -1), originals)
+        val dismissed = o.optJSONArray("dismissed")?.let { a ->
+            List(a.length()) { i -> runCatching { LocalDate.parse(a.getString(i)) }.getOrNull() }
+        }.orEmpty().filterNotNull().toSet()
+        return MonthlyPlan(id, config, days, created, o.optInt("easyWeek", -1), originals, dismissed)
     }
 
     private fun goalsToJson(goals: List<Goal>) = JSONArray().apply {
