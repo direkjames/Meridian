@@ -42,7 +42,28 @@ A private, offline-first fitness tracker for Android. No accounts, no feed, and 
 - New personal-best and **badge** cards the moment you finish
 - Rename, delete, export GPX, share, **change the sport** and **trim a forgotten start or stop** (with restore)
 
-**Plan** (training plans)
+**Plan** (two plans, side by side: switch between **Event** and **Monthly** at the top of the tab)
+
+*Monthly plan* (new)
+- **A month of walking, running, run-walk, hiking and riding**, no event needed. Pick a goal (get fitter, go further,
+  burn more, stay consistent), your sports, how many days a week, the days you're free and your long day
+- **A different month every time**: each month has a theme (Base, Speed, Long-distance or Mixed) that never repeats the
+  last one, a shuffle for a new mix of sessions, and a total that changes from month to month
+- Starts from your last 4 weeks of activities and your usual pace; three building weeks, then a **lighter fourth week**.
+  A rest day every week, never two hard days in a row, and your long session is always the biggest of the week
+- Optional **month target** (distance or time). Meridian moves toward it but never pushes your load up by more than 15%
+- A **month calendar** with a ring per day in each sport's colour that fills as you record; tap a day for its card,
+  start today's session with the target set, and see the weekly totals
+- Saved apart from the event plan and included in backups. Days where both plans have a session are marked
+
+*Editing a plan* (event and monthly)
+- Tap any day from today onwards to **change its type, sport, distance or time, move it, turn it into a rest day or add a session**
+- Moving swaps two days, so each week keeps its rest. Past days and the event day itself are locked
+- Risky edits (two hard days in a row, a much bigger week, a hard session close to the event) are allowed but
+  come with a warning
+- Edited days are tagged, and **Reset** puts a day (or the whole plan) back to how Meridian planned it
+
+*Event plan*
 - Pick the event, its date and distance (3K to marathon, or any distance)
 - **Run, Walk or Run-walk**: run a little and walk the rest, with the run bits growing as you get fitter
 - **Distance or time targets**, chosen per plan
@@ -119,10 +140,12 @@ app/src/main/java/com/meridian/tracker/
     StepCounter.kt          steps and cadence from the phone's step sensor
   data/
     ActivityStore.kt        activities as JSON on the phone + crash snapshots
-    ExtrasStore.kt          training plan, goals, saved routes, gear, badge history
+    ExtrasStore.kt          event plan, monthly plan, goals, saved routes, gear, badge history
     ActivityMedia.kt        activity photos and videos (stored privately on the phone)
     Gear.kt                 gear distance, remaining life and suggestions
-    Plan.kt                 training plan generator, progress and adaptation
+    Plan.kt                 event plan generator, progress and adaptation
+    MonthlyPlan.kt          monthly plan generator: themes, sports mix, easy week, progress
+    DayEdits.kt             editing single days of either plan, with warnings and reset
     PlanReminders.kt        morning reminders and evening nudges (WorkManager)
     Training.kt             relative effort, fitness & freshness, race predictor,
                             matched routes, goals, badges
@@ -135,7 +158,8 @@ app/src/main/java/com/meridian/tracker/
     OfflineMaps.kt, Prefs.kt, TileMath.kt
   share/                    share images and sharing
   ui/                       theme, components, screens
-app/src/test/               67 unit tests
+                            (PlanScreen: Event / Monthly switch · MonthlyPlanScreen · DayEditUi)
+app/src/test/               unit tests (run them in Android Studio)
 ```
 
 Run the unit tests in Android Studio: right-click `app/src/test` › **Run Tests**.
@@ -145,3 +169,4 @@ Run the unit tests in Android Studio: right-click `app/src/test` › **Run Tests
 - Map data © OpenStreetMap contributors; basemap © CARTO (free for non-commercial use); maps by MapLibre
 - Fonts: Instrument Sans and Geist Mono (SIL Open Font License, see `assets/licenses`)
 - Training plans and predictions are general guidance, not medical advice.
+- Author: direk james
