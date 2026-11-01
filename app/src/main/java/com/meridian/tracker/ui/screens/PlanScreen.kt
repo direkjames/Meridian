@@ -691,6 +691,7 @@ private fun StatusMark(status: DayStatus, race: Boolean) {
         DayStatus.TODAY -> Triple("TODAY", MColors.Accent, Color.Transparent)
         DayStatus.UPCOMING -> if (race) Triple("EVENT", MColors.Accent, Color.Transparent) else Triple("", MColors.Faint, Color.Transparent)
         DayStatus.REST -> Triple("REST", MColors.Faint, Color.Transparent)
+        DayStatus.MOVED -> Triple("MOVED", MColors.Faint, Color.Transparent)
     }
     if (text.isNotEmpty()) {
         Text(

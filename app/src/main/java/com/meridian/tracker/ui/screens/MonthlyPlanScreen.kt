@@ -60,7 +60,14 @@ import com.meridian.tracker.data.MonthDay
 import com.meridian.tracker.data.MonthGoal
 import com.meridian.tracker.data.MonthSport
 import com.meridian.tracker.data.MonthKind
+import com.meridian.tracker.data.CatchUp
+import com.meridian.tracker.data.HoldWeek
+import com.meridian.tracker.data.MonthlyCatchUp
 import com.meridian.tracker.data.MonthlyEdits
+import com.meridian.tracker.data.MonthlyProgress
+import com.meridian.tracker.data.Pace
+import com.meridian.tracker.data.PaceCheck
+import com.meridian.tracker.data.WeekStat
 import com.meridian.tracker.data.MonthTheme
 import com.meridian.tracker.data.MonthlyPlan
 import com.meridian.tracker.data.MonthlyPlanner
@@ -495,6 +502,10 @@ private fun MonthlyView(plan: MonthlyPlan, eventPlan: TrainingPlan?, onStartSess
     val progress = remember(plan, activities) { MonthlyPlanner.progress(plan, activities) }
     val (done, total) = MonthlyPlanner.completion(plan, status)
     val cfg = plan.config
+    val weekStats = remember(plan, activities, status) { MonthlyProgress.weeks(plan, activities, status) }
+    val pace = remember(plan, activities, status, today) { MonthlyProgress.paceCheck(plan, activities, status, today) }
+    val catchUps = remember(plan, status, today) { MonthlyCatchUp.suggestions(plan, status, today) }
+    val hold = remember(plan, status, today) { MonthlyCatchUp.hold(plan, status, today) }
     var selectedDay by rememberSaveable(plan.id) {
         mutableLongStateOf(today.clampTo(cfg.startDate, cfg.endDate).toEpochDay())
     }
@@ -580,7 +591,20 @@ private fun MonthlyView(plan: MonthlyPlan, eventPlan: TrainingPlan?, onStartSess
             Spacer(Modifier.height(14.dp))
             DayCard(
                 plan, todayDay, status[today], eventDays[today]?.title, isToday = true, onStartSession = onStartSession,
+                movedTo = movedTo(plan, todayDay),
                 onEdit = if (MonthlyEdits.canEdit(plan, today, today) && status[today] != DayStatus.DONE) ({ editingDay = today.toEpochDay() }) else null,
+            )
+        }
+
+        if (catchUps.isNotEmpty() || hold != null) {
+            Spacer(Modifier.height(14.dp))
+            CatchUpCard(
+                items = catchUps,
+                hold = hold,
+                onMove = { c -> MonthlyCatchUp.apply(plan, c, today)?.let { ExtrasStore.setMonthly(it) } },
+                onSkip = { c -> ExtrasStore.setMonthly(MonthlyCatchUp.dismiss(plan, c.missed.date)) },
+                onHold = { h -> ExtrasStore.setMonthly(MonthlyCatchUp.applyHold(plan, h, today)) },
+                onKeep = { h -> ExtrasStore.setMonthly(MonthlyCatchUp.dismiss(plan, h.key)) },
             )
         }
 
@@ -608,9 +632,13 @@ private fun MonthlyView(plan: MonthlyPlan, eventPlan: TrainingPlan?, onStartSess
             Spacer(Modifier.height(10.dp))
             DayCard(
                 plan, picked, status[picked.date], eventDays[picked.date]?.title, isToday = false, onStartSession = onStartSession,
+                movedTo = movedTo(plan, picked),
                 onEdit = if (MonthlyEdits.canEdit(plan, picked.date, today) && status[picked.date] != DayStatus.DONE) ({ editingDay = picked.date.toEpochDay() }) else null,
             )
         }
+
+        PlanLabel("Planned vs done")
+        PlannedVsActual(weekStats, pace, cfg.targetType, today)
 
         // Weeks
         PlanLabel("Weeks")
@@ -618,7 +646,7 @@ private fun MonthlyView(plan: MonthlyPlan, eventPlan: TrainingPlan?, onStartSess
             Column {
                 plan.days.groupBy { it.week }.toSortedMap().entries.forEachIndexed { i, (week, days) ->
                     if (i > 0) HorizontalHairline()
-                    val sessions = days.filterNot { it.isRest }
+                    val sessions = days.filter { !it.isRest && it.date !in plan.movedAway }
                     val doneCount = sessions.count { status[it.date] == DayStatus.DONE }
                     Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
@@ -760,6 +788,7 @@ private fun DayCard(
     isToday: Boolean,
     onStartSession: () -> Unit,
     onEdit: (() -> Unit)? = null,
+    movedTo: LocalDate? = null,
 ) {
     SectionCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(20.dp)) {
@@ -785,6 +814,10 @@ private fun DayCard(
             }
             Spacer(Modifier.height(8.dp))
             Text(day.detail, style = MType.Body)
+            if (movedTo != null) {
+                Spacer(Modifier.height(10.dp))
+                PlanNote("Moved to ${planDateLabel(movedTo)}. It won't count as missed.", warn = false)
+            }
             if (eventTitle != null) {
                 Spacer(Modifier.height(10.dp))
                 PlanNote("Event plan today: $eventTitle. Do that one first; this is a bonus if you feel fresh.", warn = false)
@@ -833,6 +866,7 @@ private fun statusText(status: DayStatus?): Pair<String, Color>? = when (status)
     DayStatus.PARTIAL -> "PART DONE" to MColors.Text
     DayStatus.MISSED -> "MISSED" to MColors.Danger
     DayStatus.REST -> "REST" to MColors.Faint
+    DayStatus.MOVED -> "MOVED" to MColors.Faint
     else -> null
 }
 
@@ -984,6 +1018,171 @@ private fun Legend(sports: List<MonthSport>) {
                 Box(Modifier.size(8.dp).clip(CircleShape).background(sportColor(s)))
                 Spacer(Modifier.width(6.dp))
                 Text(s.label.uppercase(), style = MType.Label)
+            }
+        }
+    }
+}
+
+// =================================================================================================
+// Catch-up and planned vs done
+// =================================================================================================
+
+/** The day a missed session was moved to, if it was. */
+private fun movedTo(plan: MonthlyPlan, day: MonthDay): LocalDate? =
+    plan.days.firstOrNull { !it.isRest && it.catchUpOf == day.date }?.date
+
+@Composable
+private fun CatchUpCard(
+    items: List<CatchUp>,
+    hold: HoldWeek?,
+    onMove: (CatchUp) -> Unit,
+    onSkip: (CatchUp) -> Unit,
+    onHold: (HoldWeek) -> Unit,
+    onKeep: (HoldWeek) -> Unit,
+) {
+    SectionCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(20.dp)) {
+            Text("CATCH UP", style = MType.Label.copy(color = MColors.Accent))
+            items.forEachIndexed { i, c ->
+                if (i > 0) {
+                    Spacer(Modifier.height(14.dp))
+                    HorizontalHairline()
+                }
+                Spacer(Modifier.height(10.dp))
+                Text("You missed ${c.missed.title.lowercase()} on ${planDateLabel(c.missed.date)}.", style = MType.Heading)
+                Spacer(Modifier.height(4.dp))
+                Text("Do it on ${planDateLabel(c.target)} instead?", style = MType.Body)
+                if (c.nextToHardDay) {
+                    Spacer(Modifier.height(8.dp))
+                    PlanNote("That day is next to another hard session. Skip it if your legs are tired.", warn = true)
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    PillButton("Move it", icon = MIcons.Check, onClick = { onMove(c) }, modifier = Modifier.weight(1f), height = 48.dp)
+                    PillButton("Skip it", onClick = { onSkip(c) }, filled = false, modifier = Modifier.weight(1f), height = 48.dp)
+                }
+            }
+            if (hold != null) {
+                if (items.isNotEmpty()) {
+                    Spacer(Modifier.height(14.dp))
+                    HorizontalHairline()
+                }
+                Spacer(Modifier.height(10.dp))
+                Text("You missed ${hold.missedCount} sessions in week ${hold.week + 1}.", style = MType.Heading)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Week ${hold.nextWeek + 1} is planned at ${hoursMinutes(hold.toMin)}, more than that week's ${hoursMinutes(hold.fromMin)}. " +
+                        "Keep it closer to the same level so you don't jump?",
+                    style = MType.Body,
+                )
+                Spacer(Modifier.height(12.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    PillButton("Keep it lighter", icon = MIcons.Check, onClick = { onHold(hold) }, modifier = Modifier.weight(1f), height = 48.dp)
+                    PillButton("No thanks", onClick = { onKeep(hold) }, filled = false, modifier = Modifier.weight(1f), height = 48.dp)
+                }
+            }
+        }
+    }
+}
+
+private fun amountText(type: TargetType, v: Double): String =
+    if (type == TargetType.TIME) hoursMinutes(v.roundToInt()) else "${Format.dist1(v)} ${Format.distUnit}"
+
+@Composable
+private fun PlannedVsActual(weeks: List<WeekStat>, pace: PaceCheck, type: TargetType, today: LocalDate) {
+    val chartHeight = 96
+    val max = weeks.maxOfOrNull { maxOf(it.planned(type), it.actual(type)) }?.takeIf { it > 0.0 } ?: 1.0
+    val current = weeks.firstOrNull { !today.isBefore(it.start) && !today.isAfter(it.end) }
+    val paceColor = when (pace.pace) {
+        Pace.AHEAD, Pace.ON_TRACK -> MColors.Accent
+        Pace.BEHIND, Pace.WAY_BEHIND -> MColors.Danger
+        Pace.NOT_STARTED -> MColors.Muted
+    }
+    SectionCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(18.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    pace.pace.label.uppercase(),
+                    style = MType.Label.copy(color = paceColor),
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .border(1.dp, paceColor.copy(alpha = 0.5f), CircleShape)
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            Text(
+                if (pace.pace == Pace.NOT_STARTED) "Nothing is due yet. Your first session sets the pace."
+                else "${amountText(type, pace.actual)} done, with ${amountText(type, pace.planned)} planned so far.",
+                style = MType.Body.copy(color = MColors.Text),
+            )
+            Spacer(Modifier.height(16.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Bottom) {
+                weeks.forEach { w ->
+                    val planned = w.planned(type)
+                    val actual = w.actual(type)
+                    val isNow = w == current
+                    Column(
+                        Modifier
+                            .weight(1f)
+                            .semantics {
+                                contentDescription = "Week ${w.week + 1}: ${amountText(type, actual)} done of ${amountText(type, planned)} planned"
+                            },
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Row(
+                            Modifier.height(chartHeight.dp),
+                            horizontalArrangement = Arrangement.spacedBy(3.dp),
+                            verticalAlignment = Alignment.Bottom,
+                        ) {
+                            Box(
+                                Modifier
+                                    .width(14.dp)
+                                    .height((chartHeight * (planned / max)).toFloat().coerceAtLeast(if (planned > 0) 3f else 0f).dp)
+                                    .clip(RoundedCornerShape(topStart = 5.dp, topEnd = 5.dp))
+                                    .background(MColors.Bar)
+                            )
+                            Box(
+                                Modifier
+                                    .width(14.dp)
+                                    .height((chartHeight * (actual / max)).toFloat().coerceAtLeast(if (actual > 0) 3f else 0f).dp)
+                                    .clip(RoundedCornerShape(topStart = 5.dp, topEnd = 5.dp))
+                                    .background(MColors.Accent)
+                            )
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            if (w.isEasy) "EASY" else "W${w.week + 1}",
+                            style = MType.Label.copy(
+                                fontSize = MType.Label.fontSize * 0.85f,
+                                color = if (isNow) MColors.Accent else MColors.Muted,
+                            ),
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(8.dp).clip(CircleShape).background(MColors.Bar))
+                    Spacer(Modifier.width(6.dp))
+                    Text("PLANNED", style = MType.Label)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(8.dp).clip(CircleShape).background(MColors.Accent))
+                    Spacer(Modifier.width(6.dp))
+                    Text("DONE", style = MType.Label)
+                }
+            }
+            if (current != null) {
+                Spacer(Modifier.height(12.dp))
+                HorizontalHairline()
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "This week: ${amountText(type, current.actual(type))} of ${amountText(type, current.planned(type))} · " +
+                        "${current.done} of ${current.sessions} sessions" + if (current.missed > 0) " · ${current.missed} missed" else "",
+                    style = MType.Body.copy(fontSize = MType.Body.fontSize * 0.9f),
+                )
             }
         }
     }

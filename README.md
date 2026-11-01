@@ -54,6 +54,11 @@ A private, offline-first fitness tracker for Android. No accounts, no feed, and 
 - Optional **month target** (distance or time). Meridian moves toward it but never pushes your load up by more than 15%
 - A **month calendar** with a ring per day in each sport's colour that fills as you record; tap a day for its card,
   start today's session with the target set, and see the weekly totals
+- **Planned vs done**: a bar chart per week (planned next to what you recorded, extra runs included) and a plain
+  "On track / A bit behind / Ahead" check against what was due so far
+- **Missed a key session?** Meridian offers a free day in the coming week, never beside two hard days. One tap moves it,
+  and a moved session doesn't count as missed. If you miss two or more sessions in a week, it offers to keep the next week at
+  the same level instead of jumping up
 - Saved apart from the event plan and included in backups. Days where both plans have a session are marked
 
 *Editing a plan* (event and monthly)
@@ -145,6 +150,7 @@ app/src/main/java/com/meridian/tracker/
     Gear.kt                 gear distance, remaining life and suggestions
     Plan.kt                 event plan generator, progress and adaptation
     MonthlyPlan.kt          monthly plan generator: themes, sports mix, easy week, progress
+    MonthlyProgress.kt      planned vs done per week, on-track check, catch-up for missed sessions
     DayEdits.kt             editing single days of either plan, with warnings and reset
     PlanReminders.kt        morning reminders and evening nudges (WorkManager)
     Training.kt             relative effort, fitness & freshness, race predictor,
