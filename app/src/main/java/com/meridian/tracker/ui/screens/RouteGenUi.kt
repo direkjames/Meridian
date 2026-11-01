@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import com.meridian.tracker.data.PlanResult
 import com.meridian.tracker.data.RouteGen
 import com.meridian.tracker.data.RouteGenService
+import com.meridian.tracker.data.RouteIdea
 import com.meridian.tracker.data.RouteProfile
 import com.meridian.tracker.data.RouteRequest
 import com.meridian.tracker.data.RouteShape
@@ -50,12 +51,12 @@ class GeneratedRoute(val points: List<Pair<Double, Double>>, val name: String, v
  * says plainly that the location is sent to the routing service before anything is sent.
  */
 @Composable
-fun GenerateRouteDialog(onDismiss: () -> Unit, onRoutes: (List<GeneratedRoute>) -> Unit) {
+fun GenerateRouteDialog(onDismiss: () -> Unit, onRoutes: (List<GeneratedRoute>) -> Unit, idea: RouteIdea? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var text by rememberSaveable { mutableStateOf("5") }
-    var shapeIndex by rememberSaveable { mutableIntStateOf(0) }
-    var profileIndex by rememberSaveable { mutableIntStateOf(0) }
+    var text by rememberSaveable { mutableStateOf(idea?.distanceText(Format.unitMeters) ?: "5") }
+    var shapeIndex by rememberSaveable { mutableIntStateOf(idea?.shape?.ordinal ?: 0) }
+    var profileIndex by rememberSaveable { mutableIntStateOf(idea?.profile?.ordinal ?: 0) }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var found by remember { mutableIntStateOf(0) }

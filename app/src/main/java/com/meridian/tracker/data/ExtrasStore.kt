@@ -292,6 +292,10 @@ object ExtrasStore {
             .put("index", c.monthIndex)
             .put("seed", c.seed)
             .put("prevMin", c.prevTotalMin ?: JSONObject.NULL)
+            .put("remind", c.remind)
+            .put("remH", c.reminderHour)
+            .put("remM", c.reminderMinute)
+            .put("nudge", c.eveningNudge)
             // The days are saved as planned, so a later app update never reshuffles a month in progress.
             .put("plan", JSONArray().apply { p.days.forEach { put(monthDayToJson(it)) } })
             .put("originals", JSONArray().apply { p.originals.values.forEach { put(monthDayToJson(it)) } })
@@ -351,6 +355,10 @@ object ExtrasStore {
             monthIndex = o.optInt("index", 0),
             seed = o.optLong("seed", 0L),
             prevTotalMin = if (o.isNull("prevMin")) null else o.optDouble("prevMin").takeIf { !it.isNaN() && it > 0 },
+            remind = o.optBoolean("remind", true),
+            reminderHour = o.optInt("remH", 7).coerceIn(0, 23),
+            reminderMinute = o.optInt("remM", 0).coerceIn(0, 59),
+            eveningNudge = o.optBoolean("nudge", true),
         )
         val id = o.getString("id")
         val created = o.optLong("created", 0L)

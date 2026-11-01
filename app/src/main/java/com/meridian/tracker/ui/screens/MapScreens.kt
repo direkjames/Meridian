@@ -50,6 +50,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.meridian.tracker.data.ActivityStore
 import com.meridian.tracker.data.Badges
 import com.meridian.tracker.data.ExtrasStore
+import com.meridian.tracker.data.RouteIdea
 import com.meridian.tracker.data.PlannedRoute
 import com.meridian.tracker.tracking.Geo
 import com.meridian.tracker.tracking.Sport
@@ -240,14 +241,16 @@ private fun YearChip(label: String, selected: Boolean, onClick: () -> Unit) {
 // =================================================================================================
 
 @Composable
-fun RouteBuilderScreen(onBack: () -> Unit, onFollow: () -> Unit) {
+fun RouteBuilderScreen(onBack: () -> Unit, onFollow: () -> Unit, idea: RouteIdea? = null, onIdeaUsed: () -> Unit = {}) {
     BackHandler(onBack = onBack)
     val routes by ExtrasStore.routes.collectAsStateWithLifecycle()
     val fix = TrackingManager.state.collectAsStateWithLifecycle().value.lastFix
     val points = remember { mutableStateListOf<Pair<Double, Double>>() }
     var name by rememberSaveable { mutableStateOf("") }
     var savedNote by remember { mutableStateOf<String?>(null) }
-    var generating by rememberSaveable { mutableStateOf(false) }
+    // Coming from a plan session opens the planner straight away, with that session's distance filled in.
+    var generating by rememberSaveable { mutableStateOf(idea != null) }
+    var pendingIdea by remember { mutableStateOf(idea) }
     var planNote by remember { mutableStateOf<String?>(null) }
     var fitRequest by remember { mutableStateOf(0) }
     var choices by remember { mutableStateOf<List<GeneratedRoute>>(emptyList()) }
@@ -256,7 +259,8 @@ fun RouteBuilderScreen(onBack: () -> Unit, onFollow: () -> Unit) {
 
     if (generating) {
         GenerateRouteDialog(
-            onDismiss = { generating = false },
+            idea = pendingIdea,
+            onDismiss = { generating = false; pendingIdea = null; onIdeaUsed() },
             onRoutes = { found ->
                 choices = found
                 chosen = 0
@@ -266,6 +270,8 @@ fun RouteBuilderScreen(onBack: () -> Unit, onFollow: () -> Unit) {
                 planNote = planSummary(found)
                 savedNote = null
                 generating = false
+                pendingIdea = null
+                onIdeaUsed()
                 fitRequest++
             },
         )
