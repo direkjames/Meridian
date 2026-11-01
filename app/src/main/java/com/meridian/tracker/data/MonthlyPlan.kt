@@ -116,6 +116,12 @@ data class MonthConfig(
     val seed: Long = 0L,
     /** Last month's planned minutes, so this month can be a different size. */
     val prevTotalMin: Double? = null,
+    /** Daily reminders for this plan. */
+    val remind: Boolean = true,
+    val reminderHour: Int = 7,
+    val reminderMinute: Int = 0,
+    /** A second nudge in the evening if today's session isn't done. */
+    val eveningNudge: Boolean = true,
 ) {
     fun pace(s: MonthSport): Double = s.clampPace(paces[s] ?: s.defaultPace)
 }

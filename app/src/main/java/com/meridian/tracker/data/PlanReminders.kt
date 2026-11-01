@@ -37,6 +37,10 @@ object PlanReminders {
     private const val EVENING_HOUR = 19
     private const val NOTIFICATION_MORNING = 101
     private const val NOTIFICATION_EVENING = 102
+    internal const val MONTH_MORNING = "month-morning"
+    internal const val MONTH_EVENING = "month-evening"
+    private const val NOTIFICATION_MONTH_MORNING = 103
+    private const val NOTIFICATION_MONTH_EVENING = 104
 
     /** (Re)schedules reminders for the current plan, or cancels them when there's none. */
     fun schedule(context: Context) {
@@ -45,10 +49,19 @@ object PlanReminders {
         if (plan == null || LocalDate.now().isAfter(plan.config.eventDate)) {
             wm.cancelUniqueWork(MORNING)
             wm.cancelUniqueWork(EVENING)
-            return
+        } else {
+            enqueue(wm, MORNING, LocalTime.of(plan.config.reminderHour, plan.config.reminderMinute))
+            if (plan.config.eveningNudge) enqueue(wm, EVENING, LocalTime.of(EVENING_HOUR, 0)) else wm.cancelUniqueWork(EVENING)
         }
-        enqueue(wm, MORNING, LocalTime.of(plan.config.reminderHour, plan.config.reminderMinute))
-        if (plan.config.eveningNudge) enqueue(wm, EVENING, LocalTime.of(EVENING_HOUR, 0)) else wm.cancelUniqueWork(EVENING)
+
+        val monthly = ExtrasStore.monthly.value
+        if (!MonthlyReminders.active(monthly, LocalDate.now())) {
+            wm.cancelUniqueWork(MONTH_MORNING)
+            wm.cancelUniqueWork(MONTH_EVENING)
+        } else if (monthly != null) {
+            enqueue(wm, MONTH_MORNING, LocalTime.of(monthly.config.reminderHour, monthly.config.reminderMinute))
+            if (monthly.config.eveningNudge) enqueue(wm, MONTH_EVENING, LocalTime.of(MonthlyReminders.EVENING_HOUR, 0)) else wm.cancelUniqueWork(MONTH_EVENING)
+        }
     }
 
     private fun enqueue(wm: WorkManager, name: String, time: LocalTime) {
@@ -65,6 +78,10 @@ object PlanReminders {
 
     internal suspend fun fire(context: Context, kind: String) {
         ActivityStore.ready() // make sure activities are loaded before checking today's session
+        if (kind == MONTH_MORNING || kind == MONTH_EVENING) {
+            fireMonthly(context, kind)
+            return
+        }
         val plan = ExtrasStore.plan.value ?: return
         val today = LocalDate.now()
         val day = plan.day(today)
@@ -89,6 +106,21 @@ object PlanReminders {
             else -> return
         }
         notify(context, if (kind == MORNING) NOTIFICATION_MORNING else NOTIFICATION_EVENING, title, text)
+    }
+
+    private fun fireMonthly(context: Context, kind: String) {
+        val plan = ExtrasStore.monthly.value ?: return
+        val today = LocalDate.now()
+        if (!MonthlyReminders.active(plan, today)) return
+        val day = plan.day(today)
+        val amount = if (day == null) "" else if (plan.config.targetType == TargetType.TIME) "${day.minutes} min" else "${Format.km(day.distanceM)} ${Format.distUnit}"
+        val evening = kind == MONTH_EVENING
+        val done = evening && MonthlyPlanner.status(plan, ActivityStore.activities.value, today)[today] == DayStatus.DONE
+        val eventDay = ExtrasStore.plan.value?.day(today)?.takeIf { !it.isRest }
+        val (title, text) = MonthlyReminders.message(
+            plan, day, if (evening) MonthlyReminders.Kind.EVENING else MonthlyReminders.Kind.MORNING, done, amount, eventDay?.title,
+        ) ?: return
+        notify(context, if (evening) NOTIFICATION_MONTH_EVENING else NOTIFICATION_MONTH_MORNING, title, text)
     }
 
     private fun notify(context: Context, id: Int, title: String, text: String) {

@@ -71,6 +71,10 @@ import com.meridian.tracker.data.WeekStat
 import com.meridian.tracker.data.MonthTheme
 import com.meridian.tracker.data.MonthlyPlan
 import com.meridian.tracker.data.MonthlyPlanner
+import com.meridian.tracker.data.MonthReview
+import com.meridian.tracker.data.MonthReviews
+import com.meridian.tracker.data.MonthlyRoutes
+import com.meridian.tracker.data.RouteIdea
 import com.meridian.tracker.data.TargetType
 import com.meridian.tracker.data.TrainingPlan
 import com.meridian.tracker.tracking.SessionTarget
@@ -102,6 +106,7 @@ fun MonthlyPlanTab(
     setup: Boolean,
     onSetup: (Boolean) -> Unit,
     onStartSession: () -> Unit,
+    onSuggestRoute: (RouteIdea) -> Unit = {},
 ) {
     when {
         setup -> MonthlySetup(
@@ -110,7 +115,7 @@ fun MonthlyPlanTab(
             onCreate = { ExtrasStore.setMonthly(it); onSetup(false) },
         )
         plan == null -> MonthlyIntro(onCreate = { onSetup(true) })
-        else -> MonthlyView(plan, eventPlan, onStartSession = onStartSession, onNewMonth = { onSetup(true) })
+        else -> MonthlyView(plan, eventPlan, onStartSession = onStartSession, onSuggestRoute = onSuggestRoute, onNewMonth = { onSetup(true) })
     }
 }
 
@@ -188,6 +193,10 @@ private fun MonthlySetup(previous: MonthlyPlan?, onCancel: () -> Unit, onCreate:
     var targetName by rememberSaveable { mutableStateOf(prevCfg?.targetType?.name ?: TargetType.DISTANCE.name) }
     var targetText by rememberSaveable { mutableStateOf("") }
     var seed by rememberSaveable { mutableLongStateOf(Random.nextLong()) }
+    var remindOn by rememberSaveable { mutableStateOf(prevCfg?.remind ?: true) }
+    var reminderMin by rememberSaveable { mutableIntStateOf((prevCfg?.reminderHour ?: 7) * 60 + (prevCfg?.reminderMinute ?: 0)) }
+    var nudge by rememberSaveable { mutableStateOf(prevCfg?.eveningNudge ?: true) }
+    var pickTime by remember { mutableStateOf(false) }
 
     val sports = sportNames.split(',').mapNotNull { n -> runCatching { MonthSport.valueOf(n) }.getOrNull() }.distinct()
     val goal = MonthGoal.valueOf(goalName)
@@ -195,8 +204,12 @@ private fun MonthlySetup(previous: MonthlyPlan?, onCancel: () -> Unit, onCreate:
     val freeDays = DayOfWeek.entries.filter { freeMask and (1 shl it.value) != 0 }.toSet()
 
     val nowMs = remember { System.currentTimeMillis() }
-    val usual = remember(activities, sportNames, daysPerWeek) {
-        MonthlyPlanner.usualWeekMinutes(activities, sports, daysPerWeek, nowMs)
+    // How the last month went nudges the size of the next one (only once it's nearly over).
+    val prevReview = remember(previous, activities, today) {
+        previous?.let { MonthReviews.review(it, activities, MonthlyPlanner.status(it, activities, today)) }
+    }
+    val usual = remember(activities, sportNames, daysPerWeek, prevReview) {
+        MonthReviews.nextWeekMinutes(MonthlyPlanner.usualWeekMinutes(activities, sports, daysPerWeek, nowMs), previous, prevReview, today)
     }
     var weeklyMin by rememberSaveable(sportNames) { mutableDoubleStateOf(usual) }
     val paces = remember(activities) { MonthlyPlanner.paces(activities, nowMs) }
@@ -229,6 +242,10 @@ private fun MonthlySetup(previous: MonthlyPlan?, onCancel: () -> Unit, onCreate:
         monthIndex = monthIndex,
         seed = seed,
         prevTotalMin = previous?.totalMinutes?.toDouble()?.takeIf { it > 0 },
+        remind = remindOn,
+        reminderHour = reminderMin / 60,
+        reminderMinute = reminderMin % 60,
+        eveningNudge = nudge,
     )
     val preview = remember(config, valid) { if (valid) MonthlyPlanner.generate(config, "preview", 0L) else null }
 
@@ -332,6 +349,10 @@ private fun MonthlySetup(previous: MonthlyPlan?, onCancel: () -> Unit, onCreate:
         }
 
         PlanLabel("Where you're starting")
+        if (previous != null && prevReview != null && MonthReviews.due(previous, today)) {
+            PlanNote("${monthName(previous.config.startDate)}: ${prevReview.percent}% of sessions done. ${prevReview.note}", warn = false)
+            Spacer(Modifier.height(8.dp))
+        }
         SectionCard(Modifier.fillMaxWidth()) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -373,6 +394,19 @@ private fun MonthlySetup(previous: MonthlyPlan?, onCancel: () -> Unit, onCreate:
             }
         }
 
+        PlanLabel("Reminders")
+        SectionCard(Modifier.fillMaxWidth()) {
+            Column {
+                PlanSettingRow("Daily reminder", if (remindOn) "On" else "Off", accent = remindOn) { remindOn = !remindOn }
+                if (remindOn) {
+                    HorizontalHairline()
+                    PlanSettingRow("Morning reminder", planTimeLabel(reminderMin)) { pickTime = true }
+                    HorizontalHairline()
+                    PlanSettingRow("Evening nudge at 7 PM", if (nudge) "On" else "Off", accent = nudge) { nudge = !nudge }
+                }
+            }
+        }
+
         Spacer(Modifier.height(22.dp))
         if (!valid) {
             PlanNote("Pick at least one sport and one free day.", warn = true)
@@ -407,9 +441,9 @@ private fun MonthlySetup(previous: MonthlyPlan?, onCancel: () -> Unit, onCreate:
                     warn = true,
                 )
             }
-            if (previous != null && !start.isAfter(previous.config.endDate)) {
+            if (previous != null && !today.isAfter(previous.config.endDate)) {
                 Spacer(Modifier.height(8.dp))
-                PlanNote("This replaces your current monthly plan. Your activities stay.", warn = false)
+                PlanNote("This replaces your current monthly plan right away, including any days it has left. Your activities stay.", warn = true)
             }
         }
         Spacer(Modifier.height(16.dp))
@@ -431,6 +465,7 @@ private fun MonthlySetup(previous: MonthlyPlan?, onCancel: () -> Unit, onCreate:
         )
         Spacer(Modifier.height(28.dp))
     }
+    if (pickTime) PlanTimeDialog(reminderMin, { reminderMin = it; pickTime = false }, { pickTime = false })
 }
 
 private const val ALL_DAYS = 0b1111_1110 // bits 1..7, Monday to Sunday
@@ -495,7 +530,7 @@ private fun MiniWeeks(plan: MonthlyPlan) {
 // =================================================================================================
 
 @Composable
-private fun MonthlyView(plan: MonthlyPlan, eventPlan: TrainingPlan?, onStartSession: () -> Unit, onNewMonth: () -> Unit) {
+private fun MonthlyView(plan: MonthlyPlan, eventPlan: TrainingPlan?, onStartSession: () -> Unit, onSuggestRoute: (RouteIdea) -> Unit, onNewMonth: () -> Unit) {
     val activities by ActivityStore.activities.collectAsStateWithLifecycle()
     val today = LocalDate.now()
     val status = remember(plan, activities, today) { MonthlyPlanner.status(plan, activities, today) }
@@ -513,6 +548,8 @@ private fun MonthlyView(plan: MonthlyPlan, eventPlan: TrainingPlan?, onStartSess
     var confirmResetAll by remember { mutableStateOf(false) }
     var editingDay by rememberSaveable(plan.id) { mutableLongStateOf(-1L) }
     val ended = today.isAfter(cfg.endDate)
+    val reviewDue = MonthReviews.due(plan, today) && !today.isBefore(cfg.startDate)
+    val review = remember(plan, activities, status, reviewDue) { if (reviewDue) MonthReviews.review(plan, activities, status) else null }
     val upcoming = today.isBefore(cfg.startDate)
 
     // Days the event plan also has a session: it comes first.
@@ -585,12 +622,18 @@ private fun MonthlyView(plan: MonthlyPlan, eventPlan: TrainingPlan?, onStartSess
             )
         }
 
+        if (review != null) {
+            Spacer(Modifier.height(14.dp))
+            ReviewCard(review, ended, onNext = onNewMonth)
+        }
+
         // Today
         val todayDay = plan.day(today)
         if (todayDay != null) {
             Spacer(Modifier.height(14.dp))
             DayCard(
                 plan, todayDay, status[today], eventDays[today]?.title, isToday = true, onStartSession = onStartSession,
+                onSuggestRoute = onSuggestRoute,
                 movedTo = movedTo(plan, todayDay),
                 onEdit = if (MonthlyEdits.canEdit(plan, today, today) && status[today] != DayStatus.DONE) ({ editingDay = today.toEpochDay() }) else null,
             )
@@ -632,6 +675,7 @@ private fun MonthlyView(plan: MonthlyPlan, eventPlan: TrainingPlan?, onStartSess
             Spacer(Modifier.height(10.dp))
             DayCard(
                 plan, picked, status[picked.date], eventDays[picked.date]?.title, isToday = false, onStartSession = onStartSession,
+                onSuggestRoute = onSuggestRoute,
                 movedTo = movedTo(plan, picked),
                 onEdit = if (MonthlyEdits.canEdit(plan, picked.date, today) && status[picked.date] != DayStatus.DONE) ({ editingDay = picked.date.toEpochDay() }) else null,
             )
@@ -684,7 +728,7 @@ private fun MonthlyView(plan: MonthlyPlan, eventPlan: TrainingPlan?, onStartSess
             Spacer(Modifier.height(10.dp))
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            PillButton(if (ended) "Plan next month" else "New month", onClick = onNewMonth, filled = ended, modifier = Modifier.weight(1f), height = 52.dp)
+            PillButton(if (reviewDue) "Plan next month" else "New month", onClick = onNewMonth, filled = reviewDue, modifier = Modifier.weight(1f), height = 52.dp)
             PillButton("Delete plan", onClick = { confirmDelete = true }, filled = false, modifier = Modifier.weight(1f), height = 52.dp)
         }
         Spacer(Modifier.height(28.dp))
@@ -787,6 +831,7 @@ private fun DayCard(
     eventTitle: String?,
     isToday: Boolean,
     onStartSession: () -> Unit,
+    onSuggestRoute: (RouteIdea) -> Unit = {},
     onEdit: (() -> Unit)? = null,
     movedTo: LocalDate? = null,
 ) {
@@ -846,6 +891,22 @@ private fun DayCard(
                     )
                 }
             }
+            // Not for sessions already done or days gone by: there's no point planning a route for those.
+            val idea = if (status == DayStatus.DONE || day.date.isBefore(LocalDate.now())) null else MonthlyRoutes.idea(plan, day)
+            if (idea != null && day.sport != null) {
+                Spacer(Modifier.height(if (isToday) 10.dp else 16.dp))
+                PillButton(
+                    "Suggest a route",
+                    icon = MIcons.Map,
+                    onClick = {
+                        TrackingManager.setSport(day.sport.sport)
+                        onSuggestRoute(idea)
+                    },
+                    filled = false,
+                    modifier = Modifier.fillMaxWidth(),
+                    height = 52.dp,
+                )
+            }
             if (onEdit != null) {
                 Spacer(Modifier.height(14.dp))
                 PillButton(
@@ -857,6 +918,27 @@ private fun DayCard(
                     height = 52.dp,
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun ReviewCard(review: MonthReview, ended: Boolean, onNext: () -> Unit) {
+    SectionCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(20.dp)) {
+            Text(if (ended) "MONTH REVIEW" else "MONTH SO FAR", style = MType.Label.copy(color = MColors.Accent))
+            Spacer(Modifier.height(6.dp))
+            Text(review.verdict.label, style = MType.Title)
+            Spacer(Modifier.height(12.dp))
+            Row {
+                PreviewStat("${review.percent}%", "sessions done", Modifier.weight(1f))
+                PreviewStat(hoursMinutes(review.minutes), "moving", Modifier.weight(1f))
+                PreviewStat(Format.dist1(review.distanceM), Format.distUnit, Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(12.dp))
+            Text(review.note, style = MType.Body)
+            Spacer(Modifier.height(14.dp))
+            PillButton("Plan next month", icon = MIcons.Plus, onClick = onNext, modifier = Modifier.fillMaxWidth())
         }
     }
 }

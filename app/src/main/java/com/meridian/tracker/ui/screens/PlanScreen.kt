@@ -59,6 +59,7 @@ import com.meridian.tracker.data.PlanConfig
 import com.meridian.tracker.data.PlanDay
 import com.meridian.tracker.data.PlanEdits
 import com.meridian.tracker.data.PlanGenerator
+import com.meridian.tracker.data.RouteIdea
 import com.meridian.tracker.data.PlanMode
 import com.meridian.tracker.data.SessionKind
 import com.meridian.tracker.data.TargetType
@@ -91,7 +92,7 @@ import java.util.UUID
  * sessions), kept separate so you can follow either or both.
  */
 @Composable
-fun PlanScreen(onStartSession: () -> Unit) {
+fun PlanScreen(onStartSession: () -> Unit, onSuggestRoute: (RouteIdea) -> Unit = {}) {
     val plan by ExtrasStore.plan.collectAsStateWithLifecycle()
     val monthly by ExtrasStore.monthly.collectAsStateWithLifecycle()
     var editing by rememberSaveable { mutableStateOf(false) }
@@ -137,6 +138,7 @@ fun PlanScreen(onStartSession: () -> Unit) {
                         setup = monthlySetup,
                         onSetup = { monthlySetup = it },
                         onStartSession = onStartSession,
+                        onSuggestRoute = onSuggestRoute,
                     )
                 }
             }

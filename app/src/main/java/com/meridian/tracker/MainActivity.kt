@@ -64,6 +64,7 @@ import com.meridian.tracker.ui.screens.SettingsScreen
 import com.meridian.tracker.ui.screens.SensorsScreen
 import com.meridian.tracker.ui.screens.GearScreen
 import com.meridian.tracker.data.HealthSync
+import com.meridian.tracker.data.RouteIdea
 import com.meridian.tracker.ui.screens.PlanScreen
 import com.meridian.tracker.ui.screens.RouteBuilderScreen
 import com.meridian.tracker.ui.screens.HeatmapScreen
@@ -146,6 +147,8 @@ private fun MeridianRoot() {
     var showGear by rememberSaveable { mutableStateOf(false) }
     var shareTarget by rememberSaveable { mutableStateOf<String?>(null) } // "draft" or an activity id
     var showRouteBuilder by rememberSaveable { mutableStateOf(false) }
+    // A plan session asking the route planner for a route of that length.
+    var routeIdea by remember { mutableStateOf<RouteIdea?>(null) }
     var showHeatmap by rememberSaveable { mutableStateOf(false) }
     var showBadges by rememberSaveable { mutableStateOf(false) }
 
@@ -252,8 +255,16 @@ private fun MeridianRoot() {
                             onOpenBadges = { showBadges = true },
                             onOpenHeatmap = { showHeatmap = true },
                         )
-                        "plan" -> PlanScreen(onStartSession = { goRecord() })
-                        "routes" -> RouteBuilderScreen(onBack = { showRouteBuilder = false }, onFollow = { goRecord() })
+                        "plan" -> PlanScreen(
+                            onStartSession = { goRecord() },
+                            onSuggestRoute = { routeIdea = it; showRouteBuilder = true },
+                        )
+                        "routes" -> RouteBuilderScreen(
+                            onBack = { showRouteBuilder = false; routeIdea = null },
+                            onFollow = { goRecord() },
+                            idea = routeIdea,
+                            onIdeaUsed = { routeIdea = null },
+                        )
                         "heatmap" -> HeatmapScreen(onBack = { showHeatmap = false })
                         "badges" -> BadgesScreen(
                             onBack = { showBadges = false },

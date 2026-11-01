@@ -1,178 +1,107 @@
-# Meridian 2.0
+# Meridian
 
-A private, offline-first fitness tracker for Android. No accounts, no feed, and your activities never leave your phone.
+A private fitness tracker for Android. Record runs, walks, hikes and rides, and keep everything on your phone.
+
+![Status: Active](https://img.shields.io/badge/status-active-brightgreen)
+![Version 2.0](https://img.shields.io/badge/version-2.0-blue)
+![Platform: Android](https://img.shields.io/badge/platform-Android-3DDC84)
+![Android 8.0 and up](https://img.shields.io/badge/Android-8.0%2B-informational)
+
+## About
+
+Meridian tracks your activities and helps you train. It works without an account and without a feed. Your activities stay on your phone unless you choose to share or back them up. Use it to record a session, follow a route, plan a month of workouts, or train for an event.
 
 ## Features
 
 **Recording**
-- Runs, trail runs, treadmill sessions, walks, hikes and rides with GPS that keeps going with the screen off, a live notification, a 3-2-1 countdown, pause, hold-to-finish and a pocket lock
-- Clean distance: Kalman smoothing, spike rejection and stationary-drift filtering
-- **Pause and Resume from the notification**, so you can control a run from the lock screen
-- Live distance, time, pace (or speed), climb, average pace and moving time; barometer elevation when available
-- **Follow a route** you drew, with a dashed line on the map, distance to go and an off-route alert
-- **Race your ghost**: your previous effort on the same route, shown as a dot on the map and "+12 s ahead"
-- **Today's plan target** as a progress bar, with a buzz when you reach it
-- Crash-safe: a snapshot every 15 seconds, offered back if Android kills the app
+- Record runs, trail runs, treadmill sessions, walks, hikes and rides.
+- Keeps recording with the screen off. Pause, resume and finish from the lock screen.
+- Live distance, time, pace or speed, climb and moving time.
+- Follow a route you drew, with the distance to go and an alert if you leave it.
+- Race your ghost: see your earlier effort on the same route as a dot on the map.
+- See today's plan target as a progress bar while you move.
+- Get a recording back if your phone closes the app by accident.
 
-**Heart rate, watches & steps** (new in 1.1)
-- **Live heart rate over Bluetooth** from chest straps (Polar, Garmin HRM, Wahoo…) and watches that broadcast
-  heart rate (Garmin "Broadcast Heart Rate", Coros, Polar, Suunto, Amazfit, some Huawei). Pair once in
-  Settings › Watches & sensors; Meridian reconnects by itself when you record
-- **Fitbit, Garmin, Samsung, Pixel Watch and more via Health Connect**: watch workouts appear in Meridian with
-  heart rate, steps and the map (when the watch app shares the route). Phone recordings get your watch's heart
-  rate added automatically. Read-only and on-device
-- **Step counter** during runs and walks: steps, cadence and stride on the Activity Complete screen, live steps
-  and steps-per-minute while recording
-- Heart-rate chart, **time in zones** (from your max heart rate), and **Relative Effort from heart rate**
-- Heart rate is kept in GPX exports and read from GPX, TCX and FIT imports
-
-**Photos, videos & gear** (new in 1.2)
-- **Add up to 5 photos or videos** to any activity, from the camera or your gallery, right on the Activity Complete screen
-- **Share with your photo**: pick one of the activity's photos as the background of the share image
-- **Gear**: add your shoes, bike or anything else, tick it on Activity Complete, and see total distance and distance left.
-  Shoes default to a 700 km / 450 mi life (editable) and you get a warning near the end and a **retire** prompt when worn out.
-  Manage everything in Settings › Gear
+**Heart rate, watches and steps**
+- Live heart rate from chest straps and watches that broadcast it.
+- Bring in workouts from Fitbit, Garmin, Samsung, Pixel Watch and others through Health Connect.
+- Steps, cadence and stride on runs and walks.
+- Heart rate chart, time in zones and an effort score for every activity.
 
 **Activities**
-- History with filters, a weekly chart and month groups
-- Route map, splits, pace and elevation charts you can scrub, best pace and highest point
-- **Relative Effort** for every activity, and an estimated **calories** burned (from heart rate when you add your birth year and sex, otherwise from pace and your weight in Settings › Body)
-- **Notes, effort (1 to 10) and how you felt** on every activity; the coach notices when several sessions in a row were tough
-- **Matched routes**: "2nd fastest of 6 on this route" with your times on that route
-- New personal-best and **badge** cards the moment you finish
-- Rename, delete, export GPX, share, **change the sport** and **trim a forgotten start or stop** (with restore)
+- A history you can filter, with a weekly chart.
+- Route map, splits, and pace and elevation charts you can scrub.
+- Calories, notes, effort rating and how you felt.
+- Photos and videos on any activity, and gear that tracks how far your shoes have gone.
+- See how you compare on routes you repeat, and get a card when you set a personal best or earn a badge.
+- Rename, delete, change the sport, or trim a forgotten start or stop.
 
-**Plan** (two plans, side by side: switch between **Event** and **Monthly** at the top of the tab)
-
-*Monthly plan* (new)
-- **A month of walking, running, run-walk, hiking and riding**, no event needed. Pick a goal (get fitter, go further,
-  burn more, stay consistent), your sports, how many days a week, the days you're free and your long day
-- **A different month every time**: each month has a theme (Base, Speed, Long-distance or Mixed) that never repeats the
-  last one, a shuffle for a new mix of sessions, and a total that changes from month to month
-- Starts from your last 4 weeks of activities and your usual pace; three building weeks, then a **lighter fourth week**.
-  A rest day every week, never two hard days in a row, and your long session is always the biggest of the week
-- Optional **month target** (distance or time). Meridian moves toward it but never pushes your load up by more than 15%
-- A **month calendar** with a ring per day in each sport's colour that fills as you record; tap a day for its card,
-  start today's session with the target set, and see the weekly totals
-- **Planned vs done**: a bar chart per week (planned next to what you recorded, extra runs included) and a plain
-  "On track / A bit behind / Ahead" check against what was due so far
-- **Missed a key session?** Meridian offers a free day in the coming week, never beside two hard days. One tap moves it,
-  and a moved session doesn't count as missed. If you miss two or more sessions in a week, it offers to keep the next week at
-  the same level instead of jumping up
-- Saved apart from the event plan and included in backups. Days where both plans have a session are marked
-
-*Editing a plan* (event and monthly)
-- Tap any day from today onwards to **change its type, sport, distance or time, move it, turn it into a rest day or add a session**
-- Moving swaps two days, so each week keeps its rest. Past days and the event day itself are locked
-- Risky edits (two hard days in a row, a much bigger week, a hard session close to the event) are allowed but
-  come with a warning
-- Edited days are tagged, and **Reset** puts a day (or the whole plan) back to how Meridian planned it
-
-*Event plan*
-- Pick the event, its date and distance (3K to marathon, or any distance)
-- **Run, Walk or Run-walk**: run a little and walk the rest, with the run bits growing as you get fitter
-- **Distance or time targets**, chosen per plan
-- Base, build, a lighter week every 4th week, and a taper so you arrive fresh; rest days built in
-- A morning reminder and an optional 7 PM nudge if today's session isn't done
-- Sessions tick off automatically from your activities; a missed long session doesn't make the next one jump
-- Warns you when the dates are short for the distance
+**Training plans**
+- **Event plan:** train for a fun run or race from 3K to a marathon. Run, walk or run-walk, with distance or time targets, a lighter week every fourth week and a taper before the event.
+- **Monthly plan:** get a month of walking, running, run-walk, hiking and riding, with no event needed. Pick your goal, sports, days per week, free days and long day.
+- Every month is different. Each month has a new theme and a different mix of sessions, and the total changes from month to month.
+- A month calendar shows each day's session and fills in as you record.
+- A chart compares what was planned with what you did each week, with a plain "on track" check.
+- Missed a session? Meridian suggests a free day to catch up, and a moved session does not count as missed.
+- Edit any plan: change a day's type, sport, distance or time, move it, make it a rest day, or add a session. Risky changes come with a warning, and you can reset a day or the whole plan.
+- Suggest a route for any monthly session: the route planner opens with that session's distance already filled in.
+- Daily reminders for both plans, with an optional evening nudge if today's session is not done. Monthly plans also preview the week ahead.
+- At the end of a month, a review shows how it went and sizes the next month to match.
 
 **Progress**
-- Week / Month / Year totals and charts, comparison with the previous period
-- **Goals**: weekly, monthly or yearly distance, time or activity count, with progress rings
-- **Fitness & Freshness**: fitness, fatigue and form over the last 90 days
-- **Weekly effort** with a suggested range from your last 3 weeks
-- **Race predictor** for 5K, 10K, half and marathon (run or walk) from your recent best efforts
-- **Personal bests**, streaks, **badges** (30 to earn) and your **personal heatmap**
-- **Year in Review** and **Month in Review** stories, shareable to Instagram
+- Week, month and year totals with charts and comparison to the last period.
+- Goals for distance, time or activity count, shown as progress rings.
+- Fitness and freshness over the last 90 days, and a suggested weekly effort range.
+- Race predictions for 5K, 10K, half marathon and marathon.
+- Personal bests, streaks, 30 badges and a heatmap of everywhere you have been.
+- Year in Review and Month in Review stories you can share.
 
-**Maps**
-- Dark map (OpenStreetMap via MapLibre, no API key), cached for offline use, plus **offline area downloads**
-- **Route builder**: tap to draw, loop back or out-and-back, then save and follow
-- **Plan a route from a distance**: type how far, pick loop or out-and-back, on foot or by bike, and Meridian plans it from where you stand using the free OpenStreetMap routing service (your location is sent, and the app says so first). You get up to four different routes to choose from (A to D), with START and FINISH markers
+**Maps and routes**
+- Draw a route by tapping, as a loop or out and back, then save it and follow it.
+- Plan a route from a distance, on foot or by bike. You get up to four routes to choose from.
+- Download map areas for offline use.
 
-**Sharing**
-- Transparent PNG stickers (Stats, Route, Minimal) and a solid Card, in white, yellow or black ink
-- Save to Photos, open Instagram (add it with the Photo sticker), or share anywhere
-- **Privacy zones**: hide your home or work from the start and end of shared routes and exported GPX files (backups keep everything)
-- **Weather tag**: each activity gets the conditions at its start (looked up once from Open-Meteo with your area rounded to ~10 km; can be turned off in Settings)
-- **Light, dark or system theme** (Settings > Appearance); maps stay dark in every theme
+**Sharing and privacy**
+- Share stickers and cards of your stats or route, or open them straight in Instagram.
+- Privacy zones hide your home or work from shared routes and exported files.
+- Weather for each activity, which you can turn off.
+- Light, dark or system theme.
 
 **Your data**
-- Import your **Strava archive ZIP** (GPX / TCX / FIT, names and sports kept), or single files
-- Export GPX (one activity or all), backups and restore (photos and videos included in manual backups; automatic backups keep photos, and videos too if you switch it on), **automatic backup** to a file you pick (Google Drive works), and Android's Google backup
-- Kilometres or miles, GPS accuracy, keep screen on, countdown, background-recording check
+- Import your Strava archive or single GPX, TCX and FIT files.
+- Export to GPX, back up and restore, or back up automatically to a file you pick.
+- Kilometres or miles.
 
-## Build and install
+## Getting started
 
-1. Install the latest **Android Studio**.
-2. Unzip and open the `Meridian` folder (**File › Open**). Let Gradle sync finish.
-3. Plug in your phone with **USB debugging** on, then press **Run ▶**.
+1. Install the latest Android Studio.
+2. Open the `Meridian` folder with **File > Open** and wait for the sync to finish.
+3. Plug in your phone with USB debugging on, then press **Run**.
+4. To share an APK, choose **Build > Build App Bundle(s) / APK(s) > Build APK(s)**, then send `app/build/outputs/apk/release/app-release.apk`. Build every update from the same computer, or phones will refuse it.
+5. On first launch, choose **Precise** location and allow notifications and physical activity.
+6. In Settings > Background recording, set Meridian's battery use to **Unrestricted** if it says FIX.
+7. For watches, open Settings > Watches & sensors and follow the steps.
 
-### Making an APK to share with friends
+## Requirements
 
-**Build › Build App Bundle(s) / APK(s) › Build APK(s)**, then send them
-`app/build/outputs/apk/release/app-release.apk` (or the `debug` one).
+- A phone running Android 8.0 or newer
+- Android Studio, to build the app
+- GPS for outdoor recording. The internet is needed for maps, route planning and weather.
 
-The release build is signed with your computer's debug key so it installs straight away. Build every
-update from the **same computer**, otherwise friends' phones will refuse the update. If you ever publish
-to the Play Store, create a proper key with **Build › Generate Signed App Bundle / APK** first.
+## Built with
 
-## First run tips
+- Kotlin and Jetpack Compose
+- MapLibre with OpenStreetMap data
+- WorkManager for reminders
 
-- Choose **Precise** location and allow notifications (needed for plan reminders).
-- Settings › Background recording: if it says **FIX**, set Meridian's Battery to **Unrestricted**.
-  Some brands (Xiaomi, Oppo, Vivo, Huawei, Samsung) stop background apps aggressively.
-- Do your first recording outside, since GPS indoors is weak.
-- Allow **Physical activity** when asked, so steps are counted.
-- Watches: Settings › **Watches & sensors**. For live heart rate, turn on heart-rate broadcasting on the watch,
-  then tap Find a sensor. For Fitbit/Garmin/Samsung workouts, turn on Health Connect in the watch app, then tap
-  Connect Health Connect in Meridian.
+## Status
 
-## Project layout
-
-```
-app/src/main/java/com/meridian/tracker/
-  MeridianApp.kt            app setup, notification channels, reminders
-  MainActivity.kt           permissions + navigation (Record · Activities · Plan · Progress)
-  tracking/
-    TrackProcessor.kt       GPS filtering, distance, moving time, splits
-    ElevationTracker.kt     barometer/GPS climb with noise filtering
-    Follow.kt               ghost runner and route following
-    TrackingManager.kt      recording state, ghost / route / target guides
-    TrackingService.kt      foreground service: GPS, barometer and steps with screen off
-    HeartRateMonitor.kt     Bluetooth heart-rate sensors (standard Heart Rate profile)
-    StepCounter.kt          steps and cadence from the phone's step sensor
-  data/
-    ActivityStore.kt        activities as JSON on the phone + crash snapshots
-    ExtrasStore.kt          event plan, monthly plan, goals, saved routes, gear, badge history
-    ActivityMedia.kt        activity photos and videos (stored privately on the phone)
-    Gear.kt                 gear distance, remaining life and suggestions
-    Plan.kt                 event plan generator, progress and adaptation
-    MonthlyPlan.kt          monthly plan generator: themes, sports mix, easy week, progress
-    MonthlyProgress.kt      planned vs done per week, on-track check, catch-up for missed sessions
-    DayEdits.kt             editing single days of either plan, with warnings and reset
-    PlanReminders.kt        morning reminders and evening nudges (WorkManager)
-    Training.kt             relative effort, fitness & freshness, race predictor,
-                            matched routes, goals, badges
-    Stats.kt                periods, streaks, best efforts, personal bests, reviews
-    ActivityAnalysis.kt     pace/elevation profiles
-    DataTransfer.kt         import, export, backup, restore, auto-backup
-    HeartRate.kt            heart-rate parsing, zones, effort, charts
-    HealthSync.kt           Health Connect: watch workouts, heart rate, steps
-    io/                     GPX/TCX/FIT readers, GPX writer, Strava CSV
-    OfflineMaps.kt, Prefs.kt, TileMath.kt
-  share/                    share images and sharing
-  ui/                       theme, components, screens
-                            (PlanScreen: Event / Monthly switch · MonthlyPlanScreen · DayEditUi)
-app/src/test/               unit tests (run them in Android Studio)
-```
-
-Run the unit tests in Android Studio: right-click `app/src/test` › **Run Tests**.
+Active.
 
 ## Credits
 
-- Map data © OpenStreetMap contributors; basemap © CARTO (free for non-commercial use); maps by MapLibre
-- Fonts: Instrument Sans and Geist Mono (SIL Open Font License, see `assets/licenses`)
+- Map data from OpenStreetMap contributors. Basemap from CARTO.
+- Fonts: Instrument Sans and Geist Mono.
 - Training plans and predictions are general guidance, not medical advice.
 - Author: direk james
+- License: all rights reserved. See the LICENSE file.
